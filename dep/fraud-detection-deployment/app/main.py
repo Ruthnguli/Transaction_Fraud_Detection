@@ -6,7 +6,7 @@ import numpy as np
 app = Flask(__name__)
 
 # Load the saved model
-model = joblib.load('model/Transaction_fraud_detection.pkl')
+model = joblib.load('model/Transaction_fraud_detect.pkl')
 @app.route('/predict', methods=['POST'])
 def predict():
     # Get JSON data from the request

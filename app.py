@@ -1,30 +1,79 @@
-from flask import Flask, request, jsonify
+# import joblib
+# import pandas as pd
+# from flask import Flask, request, jsonify
+
+# # Load the model
+# model = joblib.load("Transaction_fraud_detect.pkl")
+
+# app = Flask(__name__)
+
+# @app.route('/')
+# def home():
+#     return "Fraud Detection API is running!"
+
+# @app.route("/predict", methods=["POST"])
+# def predict():
+#     try:
+#         # Get JSON data
+#         data = request.get_json()
+        
+#         # Convert data into DataFrame
+#         df = pd.DataFrame(data)
+        
+#         # Make prediction
+#         prediction = model.predict(df)
+#         probability = model.predict_proba(df)[:, 1]
+
+#         return jsonify({
+#             "prediction": int(prediction[0]),
+#             "fraud_probability": round(float(probability[0]), 4)
+#         })
+    
+#     except Exception as e:
+#         return jsonify({"error": str(e)})
+
+# if __name__ == "__main__":
+
+#     app.run(host="0.0.0.0", port=5000)
+
+
+
 import joblib
-import numpy as np
+import pandas as pd
+from flask import Flask, request, jsonify
 
+# Load the model
+model = joblib.load("Transaction_fraud_detect.pkl")
 
-# Load the trained model
-model = joblib.load("Transaction_fraud_detection.pkl")
+app = Flask(__name__)
 
-# Initialize Flask app
-
-_name_ = "app"
-
-# Create a Flask app instance
-app = Flask(_name_)
-
-
-@app.route("/")
+@app.route('/')
 def home():
     return "Fraud Detection API is running!"
 
-
-
-@app.route('/predict', methods=['POST'])
+@app.route("/predict", methods=["POST"])
 def predict():
-    data = request.json['features']
-    prediction = model.predict(np.array([data]))
-    return jsonify({'fraud_prediction': int(prediction[0])})
+    try:
+        # Get JSON data
+        data = request.get_json()
 
-if _name_ == '_main_':
-    app.run(host='0.0.0.0', port=5000)
+        # Convert to DataFrame correctly
+        if isinstance(data, dict):  
+            df = pd.DataFrame([data])  # Convert single JSON object to DataFrame
+        else:
+            df = pd.DataFrame(data)  # If list of JSON objects, use directly
+
+        # Make prediction
+        prediction = model.predict(df)
+        probability = model.predict_proba(df)[:, 1]
+
+        return jsonify({
+            "prediction": int(prediction[0]),
+            "fraud_probability": round(float(probability[0]), 4)
+        })
+    
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
