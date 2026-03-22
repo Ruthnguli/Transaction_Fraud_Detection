@@ -864,7 +864,10 @@ function initChart() {
 async function callAPI(payload) {
   const res = await fetch(API, {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': 'acbfd54923b78bc76f23d57de58814ce7d2bcb33d6fda09d643958e4904682c7'
+    },
     body: JSON.stringify(payload)
   });
   return res.json();

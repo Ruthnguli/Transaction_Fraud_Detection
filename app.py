@@ -8,7 +8,15 @@ import pandas as pd
 from xgboost import XGBClassifier
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from dotenv import load_dotenv
+from functools import wraps
 
+
+
+load_dotenv()
+API_KEY = os.getenv("API_KEY")
+if not API_KEY:
+    raise RuntimeError("API_KEY not set. Add it to your .env file.")
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
@@ -31,11 +39,6 @@ FEATURE_COLUMNS = [
     "isFlaggedFraud"
 ]
 
-# Optimal decision threshold (tuned via precision-recall curve)
-# Default 0.5 gives precision=0.91, recall=0.95
-# 0.6835 gives precision=0.96, recall=0.94 — better balance for production
-FRAUD_THRESHOLD = 0.6835
-
 # Numerical features that need scaling (must match train.py)
 NUM_FEATURES = ["amount", "oldbalanceOrg", "oldbalanceDest", "step"]
 
@@ -43,12 +46,21 @@ NUM_FEATURES = ["amount", "oldbalanceOrg", "oldbalanceDest", "step"]
 app = Flask(__name__)
 CORS(app)
 
+def require_api_key(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        key = request.headers.get("X-API-Key")
+        if not key or key != API_KEY:
+            return jsonify({"error": "Unauthorized. Provide a valid API key in the X-API-Key header."}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 @app.route("/")
 def home():
     return jsonify({"status": "Fraud Detection API is running"})
 
 @app.route("/predict", methods=["POST"])
+@require_api_key
 def predict():
     data = request.get_json(force=True)
     if not data:
@@ -69,14 +81,13 @@ def predict():
         # Apply the same scaling used during training
         df[NUM_FEATURES] = scaler.transform(df[NUM_FEATURES])
 
+        prediction  = model.predict(df)
         probability = model.predict_proba(df)[:, 1]
-        prediction  = (probability >= FRAUD_THRESHOLD).astype(int)
 
         return jsonify({
             "prediction": int(prediction[0]),
             "fraud_probability": round(float(probability[0]), 4),
-            "label": "FRAUD" if prediction[0] == 1 else "LEGITIMATE",
-            "threshold_used": FRAUD_THRESHOLD
+            "label": "FRAUD" if prediction[0] == 1 else "LEGITIMATE"
         })
 
     except Exception as e:
