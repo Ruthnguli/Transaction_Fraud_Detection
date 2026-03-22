@@ -31,7 +31,7 @@ fraud_detect/
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/your-username/fraud_detect.git
+git clone https://github.com/Ruthnguli/Transaction_Fraud_Detection.git
 cd fraud_detect
 ```
 
