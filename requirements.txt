@@ -3,3 +3,6 @@ pandas
 scikit-learn
 xgboost
 joblib
+imbalanced-learn
+gunicorn
+flask-cors

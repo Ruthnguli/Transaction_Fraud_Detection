@@ -1,0 +1,31 @@
+# Git
+.git
+.gitignore
+
+# Data — never goes in the image
+data/
+*.csv
+
+# Notebooks — not needed at runtime
+notebooks/
+
+# Training code — not needed at runtime
+src/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment
+.env
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Old broken model files
+*.pkl

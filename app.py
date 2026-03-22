@@ -1,79 +1,87 @@
-# import joblib
-# import pandas as pd
-# from flask import Flask, request, jsonify
-
-# # Load the model
-# model = joblib.load("Transaction_fraud_detect.pkl")
-
-# app = Flask(__name__)
-
-# @app.route('/')
-# def home():
-#     return "Fraud Detection API is running!"
-
-# @app.route("/predict", methods=["POST"])
-# def predict():
-#     try:
-#         # Get JSON data
-#         data = request.get_json()
-        
-#         # Convert data into DataFrame
-#         df = pd.DataFrame(data)
-        
-#         # Make prediction
-#         prediction = model.predict(df)
-#         probability = model.predict_proba(df)[:, 1]
-
-#         return jsonify({
-#             "prediction": int(prediction[0]),
-#             "fraud_probability": round(float(probability[0]), 4)
-#         })
-    
-#     except Exception as e:
-#         return jsonify({"error": str(e)})
-
-# if __name__ == "__main__":
-
-#     app.run(host="0.0.0.0", port=5000)
-
-
-
+"""
+app.py — Fraud Detection API
+"""
+import os
 import joblib
+import numpy as np
 import pandas as pd
+from xgboost import XGBClassifier
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 
-# Load the model
-model = joblib.load("Transaction_fraud_detect.pkl")
 
+# ─── Paths ────────────────────────────────────────────────────────────────────
+BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH  = os.path.join(BASE_DIR, "models", "fraud_model.ubj")
+SCALER_PATH = os.path.join(BASE_DIR, "models", "scaler.pkl")
+
+# ─── Load model & scaler at startup ───────────────────────────────────────────
+try:
+    model = XGBClassifier()
+    model.load_model(MODEL_PATH)
+    scaler = joblib.load(SCALER_PATH)
+except Exception as e:
+    raise RuntimeError(f"Failed to load model/scaler: {e}")
+
+# Features the model was trained on (in exact order)
+FEATURE_COLUMNS = [
+    "step", "type", "amount",
+    "oldbalanceOrg", "newbalanceOrig",
+    "oldbalanceDest", "newbalanceDest",
+    "isFlaggedFraud"
+]
+
+# Optimal decision threshold (tuned via precision-recall curve)
+# Default 0.5 gives precision=0.91, recall=0.95
+# 0.6835 gives precision=0.96, recall=0.94 — better balance for production
+FRAUD_THRESHOLD = 0.6835
+
+# Numerical features that need scaling (must match train.py)
+NUM_FEATURES = ["amount", "oldbalanceOrg", "oldbalanceDest", "step"]
+
+# ─── App ──────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
+CORS(app)
 
-@app.route('/')
+
+@app.route("/")
 def home():
-    return "Fraud Detection API is running!"
+    return jsonify({"status": "Fraud Detection API is running"})
 
 @app.route("/predict", methods=["POST"])
 def predict():
+    data = request.get_json(force=True)
+    if not data:
+        return jsonify({"error": "No JSON body provided"}), 400
+
+    # Normalize to list of records
+    records = [data] if isinstance(data, dict) else data
+
+    # Validate required fields
+    missing = [f for f in FEATURE_COLUMNS if f not in records[0]]
+    if missing:
+        return jsonify({"error": f"Missing required fields: {missing}",
+                        "required_fields": FEATURE_COLUMNS}), 400
+
     try:
-        # Get JSON data
-        data = request.get_json()
+        df = pd.DataFrame(records)[FEATURE_COLUMNS]
 
-        # Convert to DataFrame correctly
-        if isinstance(data, dict):  
-            df = pd.DataFrame([data])  # Convert single JSON object to DataFrame
-        else:
-            df = pd.DataFrame(data)  # If list of JSON objects, use directly
+        # Apply the same scaling used during training
+        df[NUM_FEATURES] = scaler.transform(df[NUM_FEATURES])
 
-        # Make prediction
-        prediction = model.predict(df)
         probability = model.predict_proba(df)[:, 1]
+        prediction  = (probability >= FRAUD_THRESHOLD).astype(int)
 
         return jsonify({
             "prediction": int(prediction[0]),
-            "fraud_probability": round(float(probability[0]), 4)
+            "fraud_probability": round(float(probability[0]), 4),
+            "label": "FRAUD" if prediction[0] == 1 else "LEGITIMATE",
+            "threshold_used": FRAUD_THRESHOLD
         })
-    
+
     except Exception as e:
-        return jsonify({"error": str(e)})
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    app.run(host="0.0.0.0", port=5000, debug=debug)

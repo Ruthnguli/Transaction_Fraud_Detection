@@ -1,1 +1,21 @@
-Synthetic_Financial_datasets_log.csv
+# Data
+data/
+*.csv
+
+# Models
+models/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
