@@ -3,7 +3,6 @@ data/
 *.csv
 
 # Models
-models/
 
 # Python
 __pycache__/
