@@ -1,5 +1,6 @@
 """
 app.py — Fraud Detection API
+Supports numeric transaction types and Kenyan mobile money transaction names.
 """
 import os
 import joblib
@@ -21,7 +22,7 @@ BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH  = os.path.join(BASE_DIR, "models", "fraud_model.ubj")
 SCALER_PATH = os.path.join(BASE_DIR, "models", "scaler.pkl")
 
-# ─── Load model & scaler at startup ───────────────────────────────────────────
+# ─── Load model & scaler ──────────────────────────────────────────────────────
 try:
     model = XGBClassifier()
     model.load_model(MODEL_PATH)
@@ -29,8 +30,78 @@ try:
 except Exception as e:
     raise RuntimeError(f"Failed to load model/scaler: {e}")
 
+# ─── Transaction type mapper ───────────────────────────────────────────────────
+# Maps Kenyan mobile money transaction names → model type codes
+# Model codes: 0=CASH_IN, 1=CASH_OUT, 2=DEBIT, 3=PAYMENT, 4=TRANSFER
+TRANSACTION_TYPE_MAP = {
+    # ── M-Pesa ────────────────────────────────────────────────────────────────
+    "send_money":               4,  # TRANSFER  — person to person
+    "lipa_na_mpesa_till":       3,  # PAYMENT   — buy goods (till number)
+    "lipa_na_mpesa_paybill":    3,  # PAYMENT   — pay bill (utility, rent)
+    "pochi_la_biashara":        3,  # PAYMENT   — small business wallet
+    "withdraw_agent":           1,  # CASH_OUT  — agent withdrawal
+    "deposit_agent":            0,  # CASH_IN   — agent deposit
+    "mpesa_global":             4,  # TRANSFER  — international send
+    "reverse_transaction":      0,  # CASH_IN   — reversal (money back)
+    "fuliza":                   2,  # DEBIT     — overdraft/loan product
+
+    # ── Airtel Money ──────────────────────────────────────────────────────────
+    "airtel_send":              4,  # TRANSFER
+    "airtel_withdraw":          1,  # CASH_OUT
+    "airtel_deposit":           0,  # CASH_IN
+    "airtel_pay":               3,  # PAYMENT
+
+    # ── T-Kash (Telkom) ───────────────────────────────────────────────────────
+    "tkash_send":               4,  # TRANSFER
+    "tkash_withdraw":           1,  # CASH_OUT
+    "tkash_pay":                3,  # PAYMENT
+
+    # ── Equitel / Equity ──────────────────────────────────────────────────────
+    "equitel_send":             4,  # TRANSFER
+    "equitel_withdraw":         1,  # CASH_OUT
+    "eazzy_pay":                3,  # PAYMENT
+
+    # ── Generic fallbacks ─────────────────────────────────────────────────────
+    "transfer":                 4,
+    "payment":                  3,
+    "cash_out":                 1,
+    "cash_in":                  0,
+    "debit":                    2,
+
+    # ── Numeric strings (in case sent as "0", "1", etc.) ─────────────────────
+    "0": 0, "1": 1, "2": 2, "3": 3, "4": 4,
+}
+
+VALID_TYPE_CODES = {0, 1, 2, 3, 4}
+
+def resolve_type(raw_type):
+    """
+    Accepts:
+      - int/float: 0-4 (model native codes)
+      - str: Kenyan mobile money transaction name or numeric string
+    Returns:
+      - int type code (0-4)
+    Raises:
+      - ValueError if unrecognised
+    """
+    if isinstance(raw_type, (int, float)):
+        code = int(raw_type)
+        if code in VALID_TYPE_CODES:
+            return code
+        raise ValueError(f"Numeric type must be 0-4, got {raw_type}")
+
+    if isinstance(raw_type, str):
+        key = raw_type.strip().lower()
+        if key in TRANSACTION_TYPE_MAP:
+            return TRANSACTION_TYPE_MAP[key]
+        raise ValueError(
+            f"Unknown transaction type '{raw_type}'. "
+            f"Accepted names: {sorted(TRANSACTION_TYPE_MAP.keys())}"
+        )
+
+    raise ValueError(f"type must be a number (0-4) or a transaction name string, got {type(raw_type)}")
+
 # ─── Config ───────────────────────────────────────────────────────────────────
-# Fields the API caller must provide (engineered features computed server-side)
 RAW_FIELDS = [
     "step", "type", "amount",
     "oldbalanceOrg", "newbalanceOrig",
@@ -38,10 +109,8 @@ RAW_FIELDS = [
     "isFlaggedFraud"
 ]
 
-# All features the model expects (including engineered ones)
 FEATURE_COLUMNS = RAW_FIELDS + ["balance_error_orig", "balance_error_dest"]
 
-# Numerical features to scale (must match train_v2.py)
 NUM_FEATURES = [
     "amount", "oldbalanceOrg", "oldbalanceDest", "step",
     "balance_error_orig", "balance_error_dest"
@@ -70,6 +139,30 @@ def require_api_key(f):
 def home():
     return jsonify({"status": "Fraud Detection API is running"})
 
+@app.route("/transaction-types", methods=["GET"])
+def transaction_types():
+    """Returns all supported Kenyan mobile money transaction type names."""
+    grouped = {
+        "mpesa":   ["send_money", "lipa_na_mpesa_till", "lipa_na_mpesa_paybill",
+                    "pochi_la_biashara", "withdraw_agent", "deposit_agent",
+                    "mpesa_global", "reverse_transaction", "fuliza"],
+        "airtel":  ["airtel_send", "airtel_withdraw", "airtel_deposit", "airtel_pay"],
+        "tkash":   ["tkash_send", "tkash_withdraw", "tkash_pay"],
+        "equitel": ["equitel_send", "equitel_withdraw", "eazzy_pay"],
+        "generic": ["transfer", "payment", "cash_out", "cash_in", "debit"],
+        "numeric": [0, 1, 2, 3, 4]
+    }
+    return jsonify({
+        "supported_transaction_types": grouped,
+        "model_codes": {
+            "0": "CASH_IN",
+            "1": "CASH_OUT",
+            "2": "DEBIT",
+            "3": "PAYMENT",
+            "4": "TRANSFER"
+        }
+    })
+
 @app.route("/predict", methods=["POST"])
 @require_api_key
 def predict():
@@ -77,10 +170,9 @@ def predict():
     if not data:
         return jsonify({"error": "No JSON body provided"}), 400
 
-    # Normalize to list
     records = [data] if isinstance(data, dict) else data
 
-    # Validate raw input fields only — engineered features are computed here
+    # Validate required fields
     missing = [f for f in RAW_FIELDS if f not in records[0]]
     if missing:
         return jsonify({
@@ -89,24 +181,41 @@ def predict():
         }), 400
 
     try:
-        df = pd.DataFrame(records)[RAW_FIELDS]
+        df = pd.DataFrame(records)[RAW_FIELDS].copy()
 
-        # Engineer features server-side — same logic as train_v2.py
+        # Resolve transaction type — accepts name or numeric code
+        resolved_types = []
+        for _, row in df.iterrows():
+            try:
+                resolved_types.append(resolve_type(row["type"]))
+            except ValueError as e:
+                return jsonify({"error": str(e)}), 400
+        df["type"] = resolved_types
+
+        # Engineer features server-side
         df["balance_error_orig"] = df["oldbalanceOrg"] - df["newbalanceOrig"] - df["amount"]
         df["balance_error_dest"] = df["newbalanceDest"] - df["oldbalanceDest"] - df["amount"]
 
-        # Scale numerical features
+        # Scale
         df[NUM_FEATURES] = scaler.transform(df[NUM_FEATURES])
 
-        # Predict using tuned threshold
+        # Predict
         probability = model.predict_proba(df[FEATURE_COLUMNS])[:, 1]
         prediction  = (probability >= FRAUD_THRESHOLD).astype(int)
 
+        # Resolve original type name for response
+        raw_type = records[0]["type"]
+        type_name = raw_type if isinstance(raw_type, str) else {
+            0:"CASH_IN", 1:"CASH_OUT", 2:"DEBIT", 3:"PAYMENT", 4:"TRANSFER"
+        }.get(int(raw_type), str(raw_type))
+
         return jsonify({
-            "prediction": int(prediction[0]),
+            "prediction":        int(prediction[0]),
             "fraud_probability": round(float(probability[0]), 4),
-            "label": "FRAUD" if prediction[0] == 1 else "LEGITIMATE",
-            "threshold_used": FRAUD_THRESHOLD
+            "label":             "FRAUD" if prediction[0] == 1 else "LEGITIMATE",
+            "threshold_used":    FRAUD_THRESHOLD,
+            "transaction_type":  type_name,
+            "type_code":         resolved_types[0]
         })
 
     except Exception as e:

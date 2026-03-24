@@ -10,18 +10,32 @@ Trained on the [Synthetic Financial Datasets](https://www.kaggle.com/datasets/ea
 
 ```
 fraud_detect/
-├── app.py                  # Flask REST API
-├── Dockerfile              # Container definition
-├── requirements.txt        # Python dependencies
+├── app.py                          ← Flask REST API
+├── dashboard.html                  ← FraudShield monitoring dashboard
+├── Dockerfile                      ← Production container definition
+├── docker-compose.yml              ← Local container orchestration
+├── requirements.txt                ← Python dependencies
+├── README.md                       ← Project documentation
+├── STARTUP.md                      ← Local startup guide
+├── TRANSACTION_GUIDE.md            ← Manual input reference
+├── .env                            ← API key (gitignored)
+├── .dockerignore                   
+├── .gitignore                      
 ├── src/
-│   └── train.py            # Model training script
+│   ├── train.py                    ← V1 training script (baseline)
+│   └── train_v2.py                 ← V2 training script (production)
 ├── models/
-│   ├── fraud_model.ubj     # Trained XGBoost model (xgboost native format)
-│   └── scaler.pkl          # Fitted StandardScaler
+│   ├── fraud_model.ubj             ← Trained XGBoost model (xgboost native format)
+│   └── scaler.pkl                  ← Fitted StandardScaler
 ├── notebooks/
-│   ├── Africatalking_Fraud_Detection.ipynb   # EDA & model exploration
-│   └── testnote.ipynb      # API testing notebook
-└── data/                   # (gitignored) place your CSV here
+│   ├── Fraud_Detection.ipynb       ← Main notebook (EDA → model → evaluation)
+│   ├── Africatalking_Fraud_Detection.ipynb  ← Original exploration notebook
+│   ├── model_improvement.ipynb     ← V1 vs V2 comparison work
+│   └── testnote.ipynb              ← API testing notebook
+├── plots/
+│   ├── balance_error_distribution.png   ← Feature engineering analysis
+│   └── model_comparison_v1_v2.png       ← V1 vs V2 comparison charts
+└── data/                           ← gitignored — place CSV here
     └── Synthetic_Financial_datasets_log.csv
 ```
 
