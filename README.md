@@ -1,8 +1,22 @@
-# 🔍 Fraud Detection API
+# 🛡️ FraudShield — Kenya Mobile Money Fraud Detection
 
-A machine learning API for detecting fraudulent financial transactions in real time, built with XGBoost and Flask.
+A production-grade AI fraud detection system built for the **Africa's Talking Open Hackathon — Cybersecurity Solutions**. FraudShield detects fraudulent mobile money transactions in real time and instantly alerts account holders via SMS using the Africa's Talking API.
 
-Trained on the [Synthetic Financial Datasets](https://www.kaggle.com/datasets/ealaxi/paysim1) (6.3M transactions), the model achieves a **ROC-AUC of 0.9995** with a **98% fraud recall**.
+Trained on 6.3M transactions, the V3 model achieves **ROC-AUC 0.9998** with **98.4% fraud precision** and sends SMS alerts within milliseconds of detection.
+
+---
+
+## 🎯 Hackathon Context
+
+**Event:** Africa's Talking Open Hackathon — CyberSecurity Solutions, Nairobi  
+**Challenge:** Financial Security and Fraud Prevention  
+**Solution:** AI-driven anomaly detection + real-time SMS alerts via Africa's Talking APIs
+
+### What we built
+- Real-time fraud detection API supporting M-Pesa, Airtel Money, T-Kash and Equitel transactions
+- Instant SMS alert to account holder when fraud is detected (Africa's Talking SMS API)
+- Live monitoring dashboard for fraud analysts
+- Dockerized, production-ready deployment
 
 ---
 
@@ -10,7 +24,7 @@ Trained on the [Synthetic Financial Datasets](https://www.kaggle.com/datasets/ea
 
 ```
 fraud_detect/
-├── app.py                          ← Flask REST API
+├── app.py                          ← Flask REST API with AT SMS integration
 ├── dashboard.html                  ← FraudShield monitoring dashboard
 ├── Dockerfile                      ← Production container definition
 ├── docker-compose.yml              ← Local container orchestration
@@ -18,23 +32,22 @@ fraud_detect/
 ├── README.md                       ← Project documentation
 ├── STARTUP.md                      ← Local startup guide
 ├── TRANSACTION_GUIDE.md            ← Manual input reference
-├── .env                            ← API key (gitignored)
-├── .dockerignore                   
-├── .gitignore                      
+├── .env                            ← Secrets (gitignored)
 ├── src/
 │   ├── train.py                    ← V1 training script (baseline)
-│   └── train_v2.py                 ← V2 training script (production)
+│   ├── train_v2.py                 ← V2 training script (balance error features)
+│   └── train_v3.py                 ← V3 training script (production)
 ├── models/
-│   ├── fraud_model.ubj             ← Trained XGBoost model (xgboost native format)
+│   ├── fraud_model.ubj             ← Trained XGBoost V3 model
 │   └── scaler.pkl                  ← Fitted StandardScaler
 ├── notebooks/
 │   ├── Fraud_Detection.ipynb       ← Main notebook (EDA → model → evaluation)
-│   ├── Africatalking_Fraud_Detection.ipynb  ← Original exploration notebook
-│   ├── model_improvement.ipynb     ← V1 vs V2 comparison work
-│   └── testnote.ipynb              ← API testing notebook
+│   ├── testnote.ipynb              ← V3 feature exploration notebook
+│   └── model_improvement.ipynb     ← V1 vs V2 vs V3 comparison
 ├── plots/
-│   ├── balance_error_distribution.png   ← Feature engineering analysis
-│   └── model_comparison_v1_v2.png       ← V1 vs V2 comparison charts
+│   ├── balance_error_distribution.png
+│   ├── model_comparison_v1_v2.png
+│   └── model_comparison_v2_v3.png
 └── data/                           ← gitignored — place CSV here
     └── Synthetic_Financial_datasets_log.csv
 ```
@@ -45,15 +58,15 @@ fraud_detect/
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/Ruthnguli/Transaction_Fraud_Detection.git
+git clone https://github.com/your-username/fraud_detect.git
 cd fraud_detect
 ```
 
-### 2. Create and activate a virtual environment
+### 2. Create and activate environment
 ```bash
-python -m venv venv
-source venv/bin/activate        # Linux/Mac
-venv\Scripts\activate           # Windows
+conda activate datascience
+# or
+python -m venv venv && source venv/bin/activate
 ```
 
 ### 3. Install dependencies
@@ -61,32 +74,41 @@ venv\Scripts\activate           # Windows
 pip install -r requirements.txt
 ```
 
-### 4. Add the dataset
-Download the dataset from Kaggle and place it at:
+### 4. Configure environment variables
+Create a `.env` file in the project root:
+```dotenv
+API_KEY=your_secret_api_key
+AT_USERNAME=sandbox
+AT_API_KEY=your_africastalking_api_key
+ALERT_PHONE=+2547XXXXXXXXX
+```
+
+### 5. Add the dataset
+Download from Kaggle and place at:
 ```
 data/Synthetic_Financial_datasets_log.csv
 ```
 
-### 5. Train the model
+### 6. Train the model
 ```bash
-python src/train.py
+python src/train_v3.py
 ```
-This will create `models/fraud_model.ubj` and `models/scaler.pkl`.
 
 ---
 
 ## 🚀 Running the API
 
+### Option A — Python (development)
 ```bash
 python app.py
 ```
 
-The API will be available at `http://localhost:5000`.
-
-To enable debug mode:
+### Option B — Docker (production)
 ```bash
-FLASK_DEBUG=true python app.py
+docker-compose up -d
 ```
+
+API available at `http://localhost:5000`
 
 ---
 
@@ -94,96 +116,170 @@ FLASK_DEBUG=true python app.py
 
 ### `GET /`
 Health check.
-
-**Response:**
 ```json
 { "status": "Fraud Detection API is running" }
 ```
 
----
+### `GET /health`
+Model status and version info.
+```json
+{
+  "status": "healthy",
+  "model_version": "3.0",
+  "threshold": 0.6835,
+  "uptime": "0h 5m 32s",
+  "features": ["step", "type", "amount", "..."],
+  "supported_types": ["send_money", "lipa_na_mpesa_till", "..."]
+}
+```
+
+### `GET /transaction-types`
+Returns all supported Kenyan mobile money transaction names grouped by provider.
 
 ### `POST /predict`
-Predict whether a transaction is fraudulent.
+Analyze a transaction for fraud. Requires `X-API-Key` header.
 
-**Request body:**
+**Request:**
 ```json
 {
   "step": 1,
-  "type": 4,
-  "amount": 500000.0,
-  "oldbalanceOrg": 500000.0,
+  "type": "send_money",
+  "amount": 450000.0,
+  "oldbalanceOrg": 450000.0,
   "newbalanceOrig": 0.0,
   "oldbalanceDest": 0.0,
-  "newbalanceDest": 500000.0,
+  "newbalanceDest": 0.0,
   "isFlaggedFraud": 0
 }
 ```
 
-| Field | Type | Description |
-|---|---|---|
-| `step` | int | Time step (1 step = 1 hour) |
-| `type` | int | Transaction type encoded: CASH_IN=0, CASH_OUT=1, DEBIT=2, PAYMENT=3, TRANSFER=4 |
-| `amount` | float | Transaction amount |
-| `oldbalanceOrg` | float | Sender's balance before transaction |
-| `newbalanceOrig` | float | Sender's balance after transaction |
-| `oldbalanceDest` | float | Receiver's balance before transaction |
-| `newbalanceDest` | float | Receiver's balance after transaction |
-| `isFlaggedFraud` | int | System flag for large transfers (0 or 1) |
+**Supported `type` values:**
+
+| Provider | Transaction names |
+|---|---|
+| M-Pesa | `send_money`, `lipa_na_mpesa_till`, `lipa_na_mpesa_paybill`, `pochi_la_biashara`, `withdraw_agent`, `deposit_agent`, `mpesa_global`, `fuliza` |
+| Airtel Money | `airtel_send`, `airtel_pay`, `airtel_withdraw`, `airtel_deposit` |
+| T-Kash | `tkash_send`, `tkash_pay`, `tkash_withdraw` |
+| Equitel | `equitel_send`, `eazzy_pay`, `equitel_withdraw` |
+| Numeric | `0` (CASH_IN), `1` (CASH_OUT), `2` (DEBIT), `3` (PAYMENT), `4` (TRANSFER) |
 
 **Response:**
 ```json
 {
   "prediction": 1,
-  "fraud_probability": 0.9243,
-  "label": "FRAUD"
+  "fraud_probability": 1.0,
+  "label": "FRAUD",
+  "threshold_used": 0.6835,
+  "transaction_type": "send_money",
+  "type_code": 4,
+  "sms_alert_sent": true
 }
 ```
 
-| Field | Description |
-|---|---|
-| `prediction` | `0` = Legitimate, `1` = Fraud |
-| `fraud_probability` | Model confidence score (0.0 – 1.0) |
-| `label` | Human-readable result: `LEGITIMATE` or `FRAUD` |
+When `prediction == 1`, an SMS alert is automatically sent to the registered `ALERT_PHONE` via Africa's Talking SMS API.
 
 ---
 
-## 🐳 Running with Docker
+## 📱 SMS Alert
 
-```bash
-# Build the image
-docker build -t fraud-detection-api .
+When fraud is detected, the account holder receives an instant SMS:
 
-# Run the container
-docker run -p 5000:5000 fraud-detection-api
 ```
+[FraudShield Alert] SUSPICIOUS TRANSACTION DETECTED
+Type    : SEND_MONEY
+Amount  : KES 450,000.00
+Risk    : 100.0%
+Action  : Contact your bank immediately if you did not initiate this.
+```
+
+This uses the **Africa's Talking SMS API**. Switch from sandbox to live by updating `AT_USERNAME` and `AT_API_KEY` in `.env`.
 
 ---
 
 ## 🧠 Model Details
 
-| Property | Value |
-|---|---|
-| Algorithm | XGBoost (`XGBClassifier`) |
-| Imbalance handling | SMOTE (sampling_strategy=0.2) |
-| Hyperparameter tuning | RandomizedSearchCV (20 iterations, 5-fold CV) |
-| ROC-AUC Score | 0.9995 |
-| Fraud Recall | 98% |
-| False Negatives | 31 / 1,643 fraud cases in test set |
-| Training data | 6.3M transactions |
-| Model format | XGBoost native `.ubj` (version-safe) |
+### Version History
 
-### Key Features Used
-- Transaction type, amount, step
-- Origin and destination account balances (before and after)
-- System fraud flag
+| Version | Key Change | Fraud F1 | Precision | Missed Cases |
+|---|---|---|---|---|
+| V1 | Baseline XGBoost | 75% | 61% | — |
+| V2 | + balance error features | 93% | 87% | 20 |
+| V3 | + amount-to-balance ratio | **99%** | **98%** | **10** |
+
+### V3 Features
+
+| Feature | Description |
+|---|---|
+| `step` | Hour of transaction (1–744) |
+| `type` | Transaction type code (0–4) |
+| `amount` | Transaction amount in KES |
+| `oldbalanceOrg` | Sender balance before |
+| `newbalanceOrig` | Sender balance after |
+| `oldbalanceDest` | Receiver balance before |
+| `newbalanceDest` | Receiver balance after |
+| `isFlaggedFraud` | System fraud flag |
+| `balance_error_orig` | `oldbalanceOrg - newbalanceOrig - amount` — detects sender anomalies |
+| `balance_error_dest` | `newbalanceDest - oldbalanceDest - amount` — detects layering |
+| `amount_to_balance_ratio` | `amount / (oldbalanceOrg + 1)` — detects full account drains |
+
+### Fraud Signatures Detected
+
+**Type A — Money laundering (layering):**
+```
+newbalanceOrig = 0    ← sender fully drained
+newbalanceDest = 0    ← money vanished (moved again immediately)
+```
+
+**Type B — Straight theft:**
+```
+newbalanceOrig = 0           ← sender fully drained
+amount ≈ oldbalanceOrg       ← entire balance sent
+newbalanceDest > 0           ← money arrived at destination
+```
 
 ### Training Pipeline
-1. Drop missing values and identifier columns (`nameOrig`, `nameDest`)
-2. Encode `type` as category codes
-3. Scale numerical features with `StandardScaler`
-4. SMOTE oversampling on training set to handle class imbalance (0.13% fraud rate)
-5. Train XGBClassifier with optimized hyperparameters
-6. Evaluate on held-out 20% test set
+1. Drop missing values and identifier columns
+2. Encode transaction type as category codes
+3. Engineer 3 derived features
+4. Scale numerical features with `StandardScaler`
+5. SMOTE oversampling (sampling_strategy=0.2) for class imbalance
+6. XGBoost with optimized hyperparameters
+7. Threshold tuning via precision-recall curve (optimal: 0.6835)
+
+### Final Metrics (V3)
+| Metric | Value |
+|---|---|
+| ROC-AUC | 0.9998 |
+| Fraud Precision | 98.4% |
+| Fraud Recall | 99.4% |
+| Fraud F1 | 98.9% |
+| False Negatives | 10 / 1,643 fraud cases in test set |
+
+---
+
+## 🐳 Docker
+
+```bash
+# Build
+docker build -t fraudshield-api .
+
+# Run
+docker-compose up -d
+
+# Check logs
+docker-compose logs -f
+```
+
+---
+
+## 🌍 Africa's Talking Integration
+
+Current integration: **SMS fraud alerts**
+
+Planned integrations:
+- **USSD** — transaction verification via `*384#` (no smartphone needed)
+- **Voice** — automated call for high-risk fraud (probability > 95%)
+- **SMS OTP** — confirm high-value transactions before processing
 
 ---
 
@@ -191,11 +287,15 @@ docker run -p 5000:5000 fraud-detection-api
 
 ```
 flask
+flask-cors
 pandas
 scikit-learn
 xgboost
 joblib
 imbalanced-learn
+python-dotenv
+gunicorn
+africastalking
 ```
 
 ---
