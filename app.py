@@ -10,6 +10,9 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from functools import wraps
+import time
+import africastalking
+
 
 # ─── Environment ──────────────────────────────────────────────────────────────
 load_dotenv()
@@ -17,10 +20,20 @@ API_KEY = os.getenv("API_KEY")
 if not API_KEY:
     raise RuntimeError("API_KEY not set. Add it to your .env file.")
 
+# ─── Africa's Talking Setup ───────────────────────────────────────────────────
+AT_USERNAME  = os.getenv("AT_USERNAME")
+AT_API_KEY   = os.getenv("AT_API_KEY")
+ALERT_PHONE  = os.getenv("ALERT_PHONE")
+
+africastalking.initialize(AT_USERNAME, AT_API_KEY)
+sms = africastalking.SMS
+
 # ─── Paths ────────────────────────────────────────────────────────────────────
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH  = os.path.join(BASE_DIR, "models", "fraud_model.ubj")
 SCALER_PATH = os.path.join(BASE_DIR, "models", "scaler.pkl")
+START_TIME = time.time()
+MODEL_VERSION = "3.0"
 
 # ─── Load model & scaler ──────────────────────────────────────────────────────
 try:
@@ -134,10 +147,41 @@ def require_api_key(f):
         return f(*args, **kwargs)
     return decorated
 
+def send_fraud_alert(amount, tx_type, probability):
+    """Send SMS alert to account holder when fraud is detected."""
+    try:
+        message = (
+            f"[FraudShield Alert] SUSPICIOUS TRANSACTION DETECTED\n"
+            f"Type    : {tx_type.upper()}\n"
+            f"Amount  : KES {amount:,.2f}\n"
+            f"Risk    : {probability*100:.1f}%\n"
+            f"Action  : Contact your bank immediately if you did not initiate this."
+        )
+        response = sms.send(message, [ALERT_PHONE])
+        print(f"  SMS alert sent: {response}")
+        return True
+    except Exception as e:
+        print(f"  SMS alert failed: {e}")
+        return False
+
 # ─── Routes ───────────────────────────────────────────────────────────────────
 @app.route("/")
 def home():
     return jsonify({"status": "Fraud Detection API is running"})
+
+@app.route("/health", methods=["GET"])
+def health():
+    uptime_seconds = int(time.time() - START_TIME)
+    hours, remainder = divmod(uptime_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return jsonify({
+        "status"         : "healthy",
+        "model_version"  : MODEL_VERSION,
+        "threshold"      : FRAUD_THRESHOLD,
+        "features"       : FEATURE_COLUMNS,
+        "uptime"         : f"{hours}h {minutes}m {seconds}s",
+        "supported_types": list(TRANSACTION_TYPE_MAP.keys())
+    })
 
 @app.route("/transaction-types", methods=["GET"])
 def transaction_types():
@@ -162,6 +206,7 @@ def transaction_types():
             "4": "TRANSFER"
         }
     })
+
 
 @app.route("/predict", methods=["POST"])
 @require_api_key
@@ -210,13 +255,31 @@ def predict():
             0:"CASH_IN", 1:"CASH_OUT", 2:"DEBIT", 3:"PAYMENT", 4:"TRANSFER"
         }.get(int(raw_type), str(raw_type))
 
+        probability = model.predict_proba(df[FEATURE_COLUMNS])[:, 1]
+        prediction  = (probability >= FRAUD_THRESHOLD).astype(int)
+
+        # Send SMS alert if fraud detected
+        sms_sent = False
+        if prediction[0] == 1 and ALERT_PHONE:
+            sms_sent = send_fraud_alert(
+                amount    = records[0]["amount"],
+                tx_type   = records[0]["type"] if isinstance(records[0]["type"], str) else str(records[0]["type"]),
+                probability = float(probability[0])
+            )
+
+        raw_type = records[0]["type"]
+        type_name = raw_type if isinstance(raw_type, str) else {
+            0:"CASH_IN",1:"CASH_OUT",2:"DEBIT",3:"PAYMENT",4:"TRANSFER"
+        }.get(int(raw_type), str(raw_type))
+
         return jsonify({
-            "prediction":        int(prediction[0]),
-            "fraud_probability": round(float(probability[0]), 4),
-            "label":             "FRAUD" if prediction[0] == 1 else "LEGITIMATE",
-            "threshold_used":    FRAUD_THRESHOLD,
-            "transaction_type":  type_name,
-            "type_code":         resolved_types[0]
+            "prediction"        : int(prediction[0]),
+            "fraud_probability" : round(float(probability[0]), 4),
+            "label"             : "FRAUD" if prediction[0] == 1 else "LEGITIMATE",
+            "threshold_used"    : FRAUD_THRESHOLD,
+            "transaction_type"  : type_name,
+            "type_code"         : resolved_types[0],
+            "sms_alert_sent"    : sms_sent
         })
 
     except Exception as e:

@@ -7,3 +7,4 @@ imbalanced-learn
 gunicorn
 flask-cors
 python-dotenv
+africastalking
