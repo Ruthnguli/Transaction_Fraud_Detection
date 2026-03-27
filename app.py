@@ -109,11 +109,11 @@ RAW_FIELDS = [
     "isFlaggedFraud"
 ]
 
-FEATURE_COLUMNS = RAW_FIELDS + ["balance_error_orig", "balance_error_dest"]
+FEATURE_COLUMNS = RAW_FIELDS + ["balance_error_orig", "balance_error_dest", "amount_to_balance_ratio"]
 
 NUM_FEATURES = [
     "amount", "oldbalanceOrg", "oldbalanceDest", "step",
-    "balance_error_orig", "balance_error_dest"
+    "balance_error_orig", "balance_error_dest", "amount_to_balance_ratio"
 ]
 
 FRAUD_THRESHOLD = 0.6835
@@ -195,6 +195,7 @@ def predict():
         # Engineer features server-side
         df["balance_error_orig"] = df["oldbalanceOrg"] - df["newbalanceOrig"] - df["amount"]
         df["balance_error_dest"] = df["newbalanceDest"] - df["oldbalanceDest"] - df["amount"]
+        df['amount_to_balance_ratio'] = df['amount'] / (df['oldbalanceOrg'] + 1)
 
         # Scale
         df[NUM_FEATURES] = scaler.transform(df[NUM_FEATURES])
@@ -202,7 +203,7 @@ def predict():
         # Predict
         probability = model.predict_proba(df[FEATURE_COLUMNS])[:, 1]
         prediction  = (probability >= FRAUD_THRESHOLD).astype(int)
-
+        
         # Resolve original type name for response
         raw_type = records[0]["type"]
         type_name = raw_type if isinstance(raw_type, str) else {
