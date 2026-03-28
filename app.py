@@ -13,6 +13,9 @@ from functools import wraps
 import time
 import africastalking
 
+# In-memory store for last fraud detection per session
+# In production this would be a database
+fraud_sessions = {}
 
 # ─── Environment ──────────────────────────────────────────────────────────────
 load_dotenv()
@@ -182,6 +185,84 @@ def health():
         "uptime"         : f"{hours}h {minutes}m {seconds}s",
         "supported_types": list(TRANSACTION_TYPE_MAP.keys())
     })
+    
+@app.route("/ussd", methods=["POST"])
+def ussd():
+    session_id   = request.form.get("sessionId", "")
+    phone_number = request.form.get("phoneNumber", "")
+    text         = request.form.get("text", "")
+
+    # text is cumulative — "1*2" means user pressed 1 then 2
+    inputs = text.split("*") if text else []
+    level  = len(inputs)
+
+    # ── Level 0 — Main menu ───────────────────────────────────────
+    if text == "":
+        response = "CON Welcome to FraudShield\n"
+        response += "Kenya Mobile Money Protection\n\n"
+        response += "1. Check last transaction\n"
+        response += "2. Block flagged transaction\n"
+        response += "3. Account summary\n"
+        response += "0. Exit"
+
+    # ── Level 1 ───────────────────────────────────────────────────
+    elif text == "1":
+        last = fraud_sessions.get(phone_number)
+        if last:
+            status = "FRAUDULENT" if last["prediction"] == 1 else "LEGITIMATE"
+            prob   = last["fraud_probability"] * 100
+            amt    = last["amount"]
+            tx     = last["transaction_type"]
+            response = f"END Last transaction:\n"
+            response += f"Type   : {tx.upper()}\n"
+            response += f"Amount : KES {amt:,.0f}\n"
+            response += f"Status : {status}\n"
+            response += f"Risk   : {prob:.1f}%"
+        else:
+            response = "END No recent transactions found\nfor this number."
+
+    elif text == "2":
+        last = fraud_sessions.get(phone_number)
+        if last and last["prediction"] == 1:
+            amt = last["amount"]
+            tx  = last["transaction_type"]
+            response = "CON Confirm block:\n"
+            response += f"KES {amt:,.0f} {tx.upper()}\n\n"
+            response += "1. Yes — block transaction\n"
+            response += "2. No — cancel"
+        else:
+            response = "END No flagged transaction\nto block at this time."
+
+    elif text == "3":
+        last = fraud_sessions.get(phone_number)
+        total_checked = len([v for v in fraud_sessions.values()])
+        response = "END Account Summary:\n"
+        response += f"Protected by FraudShield v3.0\n"
+        response += f"Model accuracy : 98.4%\n"
+        response += f"Threshold      : 68.35%\n"
+        response += "Stay safe with FraudShield."
+
+    elif text == "0":
+        response = "END Thank you for using FraudShield.\nStay safe!"
+
+    # ── Level 2 — Block confirmation ──────────────────────────────
+    elif text == "2*1":
+        last = fraud_sessions.get(phone_number)
+        if last:
+            fraud_sessions.pop(phone_number, None)
+            response = "END Transaction BLOCKED.\n"
+            response += "Your account is safe.\n"
+            response += "Contact your bank if\nyou need further help."
+        else:
+            response = "END No transaction to block."
+
+    elif text == "2*2":
+        response = "END Block cancelled.\nTransaction not affected."
+
+    else:
+        response = "END Invalid option.\nDial *384# to try again."
+
+    return response, 200, {"Content-Type": "text/plain"}
 
 @app.route("/transaction-types", methods=["GET"])
 def transaction_types():
@@ -282,7 +363,19 @@ def predict():
             "sms_alert_sent"    : sms_sent
         })
 
+
     except Exception as e:
+        
+        # Store result for USSD lookup
+        # In production, phone number would come from the request
+        if ALERT_PHONE:
+            fraud_sessions[ALERT_PHONE] = {
+                "prediction"       : int(prediction[0]),
+                "fraud_probability": round(float(probability[0]), 4),
+                "amount"           : records[0]["amount"],
+                "transaction_type" : type_name
+            }
+        
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":

@@ -1,523 +1,1313 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FraudShield — Detection Monitor</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<style>
-:root {
-  --bg: #0a0c10; --bg2: #111318; --bg3: #181c23;
-  --border: rgba(255,255,255,0.07); --border-hover: rgba(255,255,255,0.15);
-  --text: #f0f2f7; --muted: #6b7280;
-  --accent: #00ff88; --accent-dim: rgba(0,255,136,0.12); --accent-glow: rgba(0,255,136,0.3);
-  --danger: #ff4757; --danger-dim: rgba(255,71,87,0.12); --danger-glow: rgba(255,71,87,0.3);
-  --info: #3b82f6; --info-dim: rgba(59,130,246,0.12);
-  --warn: #ffa500; --warn-dim: rgba(255,165,0,0.12);
-  --mono: 'Space Mono', monospace; --sans: 'DM Sans', sans-serif;
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; overflow-x: hidden; }
-body::before {
-  content: ''; position: fixed; inset: 0;
-  background-image: linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
-  background-size: 40px 40px; pointer-events: none; z-index: 0;
-}
-.wrapper { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 0 24px 60px; }
-header { display: flex; align-items: center; justify-content: space-between; padding: 28px 0 32px; border-bottom: 1px solid var(--border); margin-bottom: 32px; }
-.logo { display: flex; align-items: center; gap: 12px; }
-.logo-icon { width: 36px; height: 36px; border: 1.5px solid var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 16px var(--accent-glow); }
-.logo-icon svg { width: 18px; height: 18px; }
-.logo-text { font-family: var(--mono); font-size: 15px; font-weight: 700; letter-spacing: 0.05em; }
-.logo-sub { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 1px; }
-.status-dot { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); font-family: var(--mono); }
-.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: all 0.3s; }
-.dot.live { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); animation: pulse 2s infinite; }
-@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(0.85)} }
-.metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 28px; }
-.metric-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; position: relative; overflow: hidden; transition: border-color 0.2s; }
-.metric-card::after { content:''; position:absolute; top:0;left:0;right:0; height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.1),transparent); }
-.metric-card:hover { border-color: var(--border-hover); }
-.metric-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 10px; font-family: var(--mono); }
-.metric-val { font-family: var(--mono); font-size: 28px; font-weight: 700; color: var(--text); line-height: 1; }
-.metric-val.danger { color: var(--danger); text-shadow: 0 0 20px var(--danger-glow); }
-.metric-val.success { color: var(--accent); text-shadow: 0 0 20px var(--accent-glow); }
-.metric-delta { font-size: 11px; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
-.main-grid { display: grid; grid-template-columns: 400px 1fr; gap: 16px; align-items: start; }
-.panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
-.panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-.panel-title { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
-.panel-body { padding: 20px; }
-.tabs { display: flex; gap: 2px; background: var(--bg); border-radius: 8px; padding: 3px; margin-bottom: 20px; }
-.tab { flex:1; padding: 7px 10px; font-size: 12px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.06em; border: none; border-radius: 6px; cursor: pointer; background: transparent; color: var(--muted); transition: all 0.2s; }
-.tab.active { background: var(--bg3); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
-.tab-panel { display: none; }
-.tab-panel.active { display: block; }
-.field { margin-bottom: 14px; }
-.field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; font-family: var(--mono); }
-.field input, .field select { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 13px; font-family: var(--mono); color: var(--text); transition: border-color 0.2s, box-shadow 0.2s; appearance: none; }
-.field input:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
-.field select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.provider-badge { display: inline-block; font-size: 10px; font-family: var(--mono); padding: 2px 7px; border-radius: 4px; margin-left: 6px; font-weight: 700; letter-spacing: 0.05em; }
-.badge-mpesa   { background: rgba(0,255,136,0.15); color: var(--accent); }
-.badge-airtel  { background: rgba(255,71,87,0.15);  color: var(--danger); }
-.badge-tkash   { background: rgba(59,130,246,0.15); color: var(--info); }
-.badge-equitel { background: rgba(255,165,0,0.15);  color: var(--warn); }
-.badge-generic { background: rgba(255,255,255,0.08); color: var(--muted); }
-optgroup { color: var(--muted); font-size: 11px; }
-.btn-primary { width: 100%; padding: 11px; background: var(--accent); color: #000; border: none; border-radius: 8px; font-family: var(--mono); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; cursor: pointer; transition: all 0.2s; margin-top: 4px; box-shadow: 0 0 20px var(--accent-glow); }
-.btn-primary:hover { background: #00e87a; transform: translateY(-1px); }
-.btn-ghost { width: 100%; padding: 9px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 8px; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; transition: all 0.2s; margin-top: 8px; }
-.btn-ghost:hover { border-color: var(--border-hover); color: var(--text); }
-.result-box { margin-top: 16px; padding: 16px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg3); display: none; animation: slideIn 0.25s ease; }
-@keyframes slideIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-.result-box.fraud { border-color: var(--danger); background: var(--danger-dim); }
-.result-box.legit { border-color: var(--accent); background: var(--accent-dim); }
-.result-box.visible { display: block; }
-.result-verdict { font-family: var(--mono); font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-.result-verdict.fraud { color: var(--danger); text-shadow: 0 0 16px var(--danger-glow); }
-.result-verdict.legit { color: var(--accent); text-shadow: 0 0 16px var(--accent-glow); }
-.result-detail { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-bottom: 8px; }
-.result-tx { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-bottom: 10px; }
-.prob-track { height: 4px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
-.prob-fill { height: 100%; border-radius: 2px; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); background: var(--accent); }
-.prob-fill.high { background: var(--danger); box-shadow: 0 0 8px var(--danger-glow); }
-.right-col { display: flex; flex-direction: column; gap: 16px; }
-.chart-container { position: relative; height: 200px; padding: 0 4px; }
-.feed-list { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-.feed-item { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 8px; background: var(--bg3); border: 1px solid var(--border); font-family: var(--mono); font-size: 12px; animation: fadeSlide 0.3s ease; }
-@keyframes fadeSlide { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
-.feed-item.fraud { border-color: rgba(255,71,87,0.3); background: rgba(255,71,87,0.05); }
-.feed-badge { padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; flex-shrink: 0; }
-.feed-badge.fraud { background: var(--danger-dim); color: var(--danger); border: 1px solid rgba(255,71,87,0.3); }
-.feed-badge.ok { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(0,255,136,0.3); }
-.feed-amount { color: var(--text); min-width: 90px; }
-.feed-type { color: var(--muted); flex: 1; font-size: 11px; }
-.feed-prob { color: var(--muted); }
-.feed-prob.high { color: var(--danger); }
-.empty-state { padding: 32px; text-align: center; color: var(--muted); font-size: 13px; font-family: var(--mono); }
-.sim-row { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
-.btn-sim { padding: 9px 20px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent-dim); color: var(--accent); font-family: var(--mono); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; transition: all 0.2s; }
-.btn-sim:hover { background: var(--accent); color: #000; }
-.btn-sim.stop { border-color: var(--danger); background: var(--danger-dim); color: var(--danger); }
-.btn-sim.stop:hover { background: var(--danger); color: #fff; }
-.btn-reset { padding: 9px 16px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-family: var(--mono); font-size: 11px; text-transform: uppercase; cursor: pointer; transition: all 0.2s; }
-.btn-reset:hover { border-color: var(--border-hover); color: var(--text); }
-.speed-select { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); font-family: var(--mono); font-size: 11px; cursor: pointer; margin-left: auto; }
-.api-note { font-size: 11px; color: var(--muted); font-family: var(--mono); padding: 10px 14px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); margin-bottom: 16px; }
-.api-note span { color: var(--accent); }
-.error-bar { display: none; padding: 10px 14px; border-radius: 8px; background: var(--danger-dim); border: 1px solid rgba(255,71,87,0.3); color: var(--danger); font-size: 12px; font-family: var(--mono); margin-top: 10px; }
-.ticker { font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 8px 0; border-top: 1px solid var(--border); margin-top: 10px; display: flex; gap: 24px; flex-wrap: wrap; }
-.ticker span { color: var(--accent); }
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-@media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } .metrics { grid-template-columns: repeat(2,1fr); } }
-</style>
-</head>
-<body>
-<div class="wrapper">
-  <header>
-    <div class="logo">
-      <div class="logo-icon">
-        <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M9 2L15 5.5V12.5L9 16L3 12.5V5.5L9 2Z" stroke="#00ff88" stroke-width="1.5" stroke-linejoin="round"/>
-          <path d="M9 6V10M9 12V12.5" stroke="#00ff88" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FraudShield — Detection Monitor</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0a0c10;
+        --bg2: #111318;
+        --bg3: #181c23;
+        --border: rgba(255, 255, 255, 0.07);
+        --border-hover: rgba(255, 255, 255, 0.15);
+        --text: #f0f2f7;
+        --muted: #6b7280;
+        --accent: #00ff88;
+        --accent-dim: rgba(0, 255, 136, 0.12);
+        --accent-glow: rgba(0, 255, 136, 0.3);
+        --danger: #ff4757;
+        --danger-dim: rgba(255, 71, 87, 0.12);
+        --danger-glow: rgba(255, 71, 87, 0.3);
+        --info: #3b82f6;
+        --info-dim: rgba(59, 130, 246, 0.12);
+        --warn: #ffa500;
+        --warn-dim: rgba(255, 165, 0, 0.12);
+        --mono: "Space Mono", monospace;
+        --sans: "DM Sans", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(0, 255, 136, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 255, 136, 0.03) 1px, transparent 1px);
+        background-size: 40px 40px;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .wrapper {
+        position: relative;
+        z-index: 1;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 24px 60px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 28px 0 32px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 32px;
+      }
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .logo-icon {
+        width: 36px;
+        height: 36px;
+        border: 1.5px solid var(--accent);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 16px var(--accent-glow);
+      }
+      .logo-icon svg {
+        width: 18px;
+        height: 18px;
+      }
+      .logo-text {
+        font-family: var(--mono);
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+      }
+      .logo-sub {
+        font-size: 11px;
+        color: var(--muted);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-top: 1px;
+      }
+      .status-dot {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
+        color: var(--muted);
+        font-family: var(--mono);
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--muted);
+        transition: all 0.3s;
+      }
+      .dot.live {
+        background: var(--accent);
+        box-shadow: 0 0 8px var(--accent-glow);
+        animation: pulse 2s infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.6;
+          transform: scale(0.85);
+        }
+      }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 28px;
+      }
+      .metric-card {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px;
+        position: relative;
+        overflow: hidden;
+        transition: border-color 0.2s;
+      }
+      .metric-card::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.1),
+          transparent
+        );
+      }
+      .metric-card:hover {
+        border-color: var(--border-hover);
+      }
+      .metric-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        margin-bottom: 10px;
+        font-family: var(--mono);
+      }
+      .metric-val {
+        font-family: var(--mono);
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1;
+      }
+      .metric-val.danger {
+        color: var(--danger);
+        text-shadow: 0 0 20px var(--danger-glow);
+      }
+      .metric-val.success {
+        color: var(--accent);
+        text-shadow: 0 0 20px var(--accent-glow);
+      }
+      .metric-delta {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 6px;
+        font-family: var(--mono);
+      }
+      .main-grid {
+        display: grid;
+        grid-template-columns: 400px 1fr;
+        gap: 16px;
+        align-items: start;
+      }
+      .panel {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      .panel-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .panel-title {
+        font-family: var(--mono);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+      }
+      .panel-body {
+        padding: 20px;
+      }
+      .tabs {
+        display: flex;
+        gap: 2px;
+        background: var(--bg);
+        border-radius: 8px;
+        padding: 3px;
+        margin-bottom: 20px;
+      }
+      .tab {
+        flex: 1;
+        padding: 7px 10px;
+        font-size: 12px;
+        font-family: var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        background: transparent;
+        color: var(--muted);
+        transition: all 0.2s;
+      }
+      .tab.active {
+        background: var(--bg3);
+        color: var(--text);
+        box-shadow: 0 0 0 1px var(--border);
+      }
+      .tab-panel {
+        display: none;
+      }
+      .tab-panel.active {
+        display: block;
+      }
+      .field {
+        margin-bottom: 14px;
+      }
+      .field label {
+        display: block;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 6px;
+        font-family: var(--mono);
+      }
+      .field input,
+      .field select {
+        width: 100%;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 9px 12px;
+        font-size: 13px;
+        font-family: var(--mono);
+        color: var(--text);
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s;
+        appearance: none;
+      }
+      .field input:focus,
+      .field select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-dim);
+      }
+      .field select {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 32px;
+      }
+      .field-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .provider-badge {
+        display: inline-block;
+        font-size: 10px;
+        font-family: var(--mono);
+        padding: 2px 7px;
+        border-radius: 4px;
+        margin-left: 6px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+      }
+      .badge-mpesa {
+        background: rgba(0, 255, 136, 0.15);
+        color: var(--accent);
+      }
+      .badge-airtel {
+        background: rgba(255, 71, 87, 0.15);
+        color: var(--danger);
+      }
+      .badge-tkash {
+        background: rgba(59, 130, 246, 0.15);
+        color: var(--info);
+      }
+      .badge-equitel {
+        background: rgba(255, 165, 0, 0.15);
+        color: var(--warn);
+      }
+      .badge-generic {
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--muted);
+      }
+      optgroup {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .btn-primary {
+        width: 100%;
+        padding: 11px;
+        background: var(--accent);
+        color: #000;
+        border: none;
+        border-radius: 8px;
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-top: 4px;
+        box-shadow: 0 0 20px var(--accent-glow);
+      }
+      .btn-primary:hover {
+        background: #00e87a;
+        transform: translateY(-1px);
+      }
+      .btn-ghost {
+        width: 100%;
+        padding: 9px;
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-top: 8px;
+      }
+      .btn-ghost:hover {
+        border-color: var(--border-hover);
+        color: var(--text);
+      }
+      .result-box {
+        margin-top: 16px;
+        padding: 16px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--bg3);
+        display: none;
+        animation: slideIn 0.25s ease;
+      }
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .result-box.fraud {
+        border-color: var(--danger);
+        background: var(--danger-dim);
+      }
+      .result-box.legit {
+        border-color: var(--accent);
+        background: var(--accent-dim);
+      }
+      .result-box.visible {
+        display: block;
+      }
+      .result-verdict {
+        font-family: var(--mono);
+        font-size: 18px;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+      .result-verdict.fraud {
+        color: var(--danger);
+        text-shadow: 0 0 16px var(--danger-glow);
+      }
+      .result-verdict.legit {
+        color: var(--accent);
+        text-shadow: 0 0 16px var(--accent-glow);
+      }
+      .result-detail {
+        font-size: 12px;
+        color: var(--muted);
+        font-family: var(--mono);
+        margin-bottom: 8px;
+      }
+      .result-tx {
+        font-size: 11px;
+        color: var(--muted);
+        font-family: var(--mono);
+        margin-bottom: 10px;
+      }
+      .prob-track {
+        height: 4px;
+        background: rgba(255, 255, 255, 0.07);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .prob-fill {
+        height: 100%;
+        border-radius: 2px;
+        transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        background: var(--accent);
+      }
+      .prob-fill.high {
+        background: var(--danger);
+        box-shadow: 0 0 8px var(--danger-glow);
+      }
+      .right-col {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .chart-container {
+        position: relative;
+        height: 200px;
+        padding: 0 4px;
+      }
+      .feed-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 300px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border) transparent;
+      }
+      .feed-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border-radius: 8px;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        font-family: var(--mono);
+        font-size: 12px;
+        animation: fadeSlide 0.3s ease;
+      }
+      @keyframes fadeSlide {
+        from {
+          opacity: 0;
+          transform: translateX(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      .feed-item.fraud {
+        border-color: rgba(255, 71, 87, 0.3);
+        background: rgba(255, 71, 87, 0.05);
+      }
+      .feed-badge {
+        padding: 2px 7px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        flex-shrink: 0;
+      }
+      .feed-badge.fraud {
+        background: var(--danger-dim);
+        color: var(--danger);
+        border: 1px solid rgba(255, 71, 87, 0.3);
+      }
+      .feed-badge.ok {
+        background: var(--accent-dim);
+        color: var(--accent);
+        border: 1px solid rgba(0, 255, 136, 0.3);
+      }
+      .feed-amount {
+        color: var(--text);
+        min-width: 90px;
+      }
+      .feed-type {
+        color: var(--muted);
+        flex: 1;
+        font-size: 11px;
+      }
+      .feed-prob {
+        color: var(--muted);
+      }
+      .feed-prob.high {
+        color: var(--danger);
+      }
+      .empty-state {
+        padding: 32px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 13px;
+        font-family: var(--mono);
+      }
+      .sim-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+      .btn-sim {
+        padding: 9px 20px;
+        border-radius: 8px;
+        border: 1px solid var(--accent);
+        background: var(--accent-dim);
+        color: var(--accent);
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn-sim:hover {
+        background: var(--accent);
+        color: #000;
+      }
+      .btn-sim.stop {
+        border-color: var(--danger);
+        background: var(--danger-dim);
+        color: var(--danger);
+      }
+      .btn-sim.stop:hover {
+        background: var(--danger);
+        color: #fff;
+      }
+      .btn-reset {
+        padding: 9px 16px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn-reset:hover {
+        border-color: var(--border-hover);
+        color: var(--text);
+      }
+      .speed-select {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11px;
+        cursor: pointer;
+        margin-left: auto;
+      }
+      .api-note {
+        font-size: 11px;
+        color: var(--muted);
+        font-family: var(--mono);
+        padding: 10px 14px;
+        background: var(--bg);
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        margin-bottom: 16px;
+      }
+      .api-note span {
+        color: var(--accent);
+      }
+      .error-bar {
+        display: none;
+        padding: 10px 14px;
+        border-radius: 8px;
+        background: var(--danger-dim);
+        border: 1px solid rgba(255, 71, 87, 0.3);
+        color: var(--danger);
+        font-size: 12px;
+        font-family: var(--mono);
+        margin-top: 10px;
+      }
+      .ticker {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        padding: 8px 0;
+        border-top: 1px solid var(--border);
+        margin-top: 10px;
+        display: flex;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+      .ticker span {
+        color: var(--accent);
+      }
+      ::-webkit-scrollbar {
+        width: 4px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 2px;
+      }
+      @media (max-width: 900px) {
+        .main-grid {
+          grid-template-columns: 1fr;
+        }
+        .metrics {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <div class="logo">
+          <div class="logo-icon">
+            <svg
+              viewBox="0 0 18 18"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M9 2L15 5.5V12.5L9 16L3 12.5V5.5L9 2Z"
+                stroke="#00ff88"
+                stroke-width="1.5"
+                stroke-linejoin="round"
+              />
+              <path
+                d="M9 6V10M9 12V12.5"
+                stroke="#00ff88"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              />
+            </svg>
+          </div>
+          <div>
+            <div class="logo-text">FRAUDSHIELD</div>
+            <div class="logo-sub">Kenya Mobile Money Monitor</div>
+          </div>
+        </div>
+        <div class="status-dot">
+          <div class="dot" id="status-dot"></div>
+          <span id="status-label">Idle</span>
+        </div>
+      </header>
+
+      <div class="metrics">
+        <div class="metric-card">
+          <div class="metric-label">Total Checked</div>
+          <div class="metric-val" id="m-total">0</div>
+          <div class="metric-delta" id="m-total-sub">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Fraud Detected</div>
+          <div class="metric-val danger" id="m-fraud">0</div>
+          <div class="metric-delta" id="m-fraud-sub">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Fraud Rate</div>
+          <div class="metric-val" id="m-rate">0.00%</div>
+          <div class="metric-delta">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Avg Confidence</div>
+          <div class="metric-val success" id="m-conf">—</div>
+          <div class="metric-delta">threshold 68.35%</div>
+        </div>
       </div>
-      <div>
-        <div class="logo-text">FRAUDSHIELD</div>
-        <div class="logo-sub">Kenya Mobile Money Monitor</div>
+
+      <div class="main-grid">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Transaction Analysis</span>
+          </div>
+          <div class="panel-body">
+            <div class="tabs">
+              <button class="tab active" onclick="switchTab('manual')">
+                Manual
+              </button>
+              <button class="tab" onclick="switchTab('sim')">Simulate</button>
+              <button class="tab" onclick="switchTab('feed')">Feed</button>
+            </div>
+
+            <!-- Manual -->
+            <div class="tab-panel active" id="tp-manual">
+              <div class="field">
+                <label>Transaction type</label>
+                <select id="f-type">
+                  <optgroup label="── M-Pesa">
+                    <option value="send_money">Send Money</option>
+                    <option value="lipa_na_mpesa_till">
+                      Lipa Na M-Pesa (Till)
+                    </option>
+                    <option value="lipa_na_mpesa_paybill">
+                      Lipa Na M-Pesa (Pay Bill)
+                    </option>
+                    <option value="pochi_la_biashara">Pochi La Biashara</option>
+                    <option value="withdraw_agent">Withdraw (Agent)</option>
+                    <option value="deposit_agent">Deposit (Agent)</option>
+                    <option value="mpesa_global">M-Pesa Global</option>
+                    <option value="fuliza">Fuliza (Overdraft)</option>
+                  </optgroup>
+                  <optgroup label="── Airtel Money">
+                    <option value="airtel_send">Airtel Send</option>
+                    <option value="airtel_pay">Airtel Pay</option>
+                    <option value="airtel_withdraw">Airtel Withdraw</option>
+                    <option value="airtel_deposit">Airtel Deposit</option>
+                  </optgroup>
+                  <optgroup label="── T-Kash">
+                    <option value="tkash_send">T-Kash Send</option>
+                    <option value="tkash_pay">T-Kash Pay</option>
+                    <option value="tkash_withdraw">T-Kash Withdraw</option>
+                  </optgroup>
+                  <optgroup label="── Equitel">
+                    <option value="equitel_send">Equitel Send</option>
+                    <option value="eazzy_pay">Eazzy Pay</option>
+                    <option value="equitel_withdraw">Equitel Withdraw</option>
+                  </optgroup>
+                </select>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Step (hour)</label
+                  ><input id="f-step" type="number" value="1" min="1" />
+                </div>
+                <div class="field">
+                  <label>Amount (KES)</label
+                  ><input id="f-amount" type="number" value="4878" />
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Sender — before</label
+                  ><input id="f-oldOrig" type="number" value="170136" />
+                </div>
+                <div class="field">
+                  <label>Sender — after</label
+                  ><input id="f-newOrig" type="number" value="165258" />
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Receiver — before</label
+                  ><input id="f-oldDest" type="number" value="0" />
+                </div>
+                <div class="field">
+                  <label>Receiver — after</label
+                  ><input id="f-newDest" type="number" value="4878" />
+                </div>
+              </div>
+              <div class="field">
+                <label>System fraud flag</label>
+                <select id="f-flag">
+                  <option value="0">No (0)</option>
+                  <option value="1">Yes (1)</option>
+                </select>
+              </div>
+              <button class="btn-primary" onclick="manualPredict()">
+                Analyze Transaction →
+              </button>
+              <button class="btn-ghost" onclick="loadFraudExample()">
+                Load fraud scenario (Send Money)
+              </button>
+              <div class="error-bar" id="manual-error">
+                Could not reach API at http://127.0.0.1:5000 — is the server
+                running?
+              </div>
+              <div class="result-box" id="manual-result">
+                <div class="result-verdict" id="res-verdict"></div>
+                <div class="result-detail" id="res-detail"></div>
+                <div class="result-tx" id="res-tx"></div>
+                <div class="prob-track">
+                  <div class="prob-fill" id="res-bar" style="width: 0%"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Simulate -->
+            <div class="tab-panel" id="tp-sim">
+              <div class="api-note">
+                Sending to <span>http://127.0.0.1:5000/predict</span>
+              </div>
+              <div class="sim-row">
+                <button class="btn-sim" id="sim-btn" onclick="toggleSim()">
+                  Start
+                </button>
+                <button class="btn-reset" onclick="resetStats()">Reset</button>
+                <select class="speed-select" id="sim-speed">
+                  <option value="2000">Slow</option>
+                  <option value="1000" selected>Normal</option>
+                  <option value="500">Fast</option>
+                </select>
+              </div>
+              <div class="error-bar" id="sim-error">
+                Could not reach API — is the server running on port 5000?
+              </div>
+              <div
+                style="
+                  font-size: 12px;
+                  color: var(--muted);
+                  font-family: var(--mono);
+                  line-height: 1.8;
+                "
+              >
+                Simulates random Kenyan mobile money transactions (~15%
+                fraud-like) across M-Pesa, Airtel Money, T-Kash and Equitel.
+              </div>
+            </div>
+
+            <!-- Feed -->
+            <div class="tab-panel" id="tp-feed">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  margin-bottom: 12px;
+                "
+              >
+                <span
+                  style="
+                    font-size: 11px;
+                    color: var(--muted);
+                    font-family: var(--mono);
+                  "
+                  id="feed-count"
+                  >0 transactions</span
+                >
+                <button
+                  class="btn-reset"
+                  onclick="clearFeed()"
+                  style="padding: 5px 12px; font-size: 10px"
+                >
+                  Clear
+                </button>
+              </div>
+              <div class="feed-list" id="tx-feed">
+                <div class="empty-state">No transactions yet</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="right-col">
+          <div class="panel">
+            <div class="panel-header">
+              <span class="panel-title">Fraud Probability — Live</span>
+              <span
+                style="
+                  font-size: 11px;
+                  color: var(--muted);
+                  font-family: var(--mono);
+                "
+                id="chart-count"
+                >0 samples</span
+              >
+            </div>
+            <div class="panel-body" style="padding: 16px 16px 8px">
+              <div class="chart-container">
+                <canvas id="prob-chart"></canvas>
+              </div>
+              <div class="ticker">
+                <div>last: <span id="tick-last">—</span></div>
+                <div>peak: <span id="tick-peak">—</span></div>
+                <div>type: <span id="tick-type">—</span></div>
+                <div>amount: <span id="tick-amount">—</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <span class="panel-title">Recent Transactions</span>
+              <span
+                style="
+                  font-size: 11px;
+                  color: var(--muted);
+                  font-family: var(--mono);
+                "
+                id="fraud-count-label"
+                >0 fraud</span
+              >
+            </div>
+            <div class="panel-body" style="padding: 12px">
+              <div class="feed-list" id="recent-feed">
+                <div class="empty-state">Waiting for transactions…</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="status-dot">
-      <div class="dot" id="status-dot"></div>
-      <span id="status-label">Idle</span>
-    </div>
-  </header>
 
-  <div class="metrics">
-    <div class="metric-card"><div class="metric-label">Total Checked</div><div class="metric-val" id="m-total">0</div><div class="metric-delta" id="m-total-sub">—</div></div>
-    <div class="metric-card"><div class="metric-label">Fraud Detected</div><div class="metric-val danger" id="m-fraud">0</div><div class="metric-delta" id="m-fraud-sub">—</div></div>
-    <div class="metric-card"><div class="metric-label">Fraud Rate</div><div class="metric-val" id="m-rate">0.00%</div><div class="metric-delta">—</div></div>
-    <div class="metric-card"><div class="metric-label">Avg Confidence</div><div class="metric-val success" id="m-conf">—</div><div class="metric-delta">threshold 68.35%</div></div>
-  </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <script>
+      const API = "http://127.0.0.1:5000/predict";
+      const API_KEY =
+        "acbfd54923b78bc76f23d57de58814ce7d2bcb33d6fda09d643958e4904682c7";
 
-  <div class="main-grid">
-    <div class="panel">
-      <div class="panel-header"><span class="panel-title">Transaction Analysis</span></div>
-      <div class="panel-body">
-        <div class="tabs">
-          <button class="tab active" onclick="switchTab('manual')">Manual</button>
-          <button class="tab" onclick="switchTab('sim')">Simulate</button>
-          <button class="tab" onclick="switchTab('feed')">Feed</button>
-        </div>
+      // Kenyan mobile money transaction types for simulation
+      const SIM_TYPES = {
+        fraud: ["send_money", "airtel_send", "tkash_send", "equitel_send"],
+        normal: [
+          "lipa_na_mpesa_till",
+          "lipa_na_mpesa_paybill",
+          "pochi_la_biashara",
+          "withdraw_agent",
+          "deposit_agent",
+          "airtel_pay",
+          "tkash_pay",
+          "eazzy_pay",
+          "fuliza",
+          "airtel_deposit",
+        ],
+      };
 
-        <!-- Manual -->
-        <div class="tab-panel active" id="tp-manual">
-          <div class="field">
-            <label>Transaction type</label>
-            <select id="f-type">
-              <optgroup label="── M-Pesa">
-                <option value="send_money">Send Money</option>
-                <option value="lipa_na_mpesa_till">Lipa Na M-Pesa (Till)</option>
-                <option value="lipa_na_mpesa_paybill">Lipa Na M-Pesa (Pay Bill)</option>
-                <option value="pochi_la_biashara">Pochi La Biashara</option>
-                <option value="withdraw_agent">Withdraw (Agent)</option>
-                <option value="deposit_agent">Deposit (Agent)</option>
-                <option value="mpesa_global">M-Pesa Global</option>
-                <option value="fuliza">Fuliza (Overdraft)</option>
-              </optgroup>
-              <optgroup label="── Airtel Money">
-                <option value="airtel_send">Airtel Send</option>
-                <option value="airtel_pay">Airtel Pay</option>
-                <option value="airtel_withdraw">Airtel Withdraw</option>
-                <option value="airtel_deposit">Airtel Deposit</option>
-              </optgroup>
-              <optgroup label="── T-Kash">
-                <option value="tkash_send">T-Kash Send</option>
-                <option value="tkash_pay">T-Kash Pay</option>
-                <option value="tkash_withdraw">T-Kash Withdraw</option>
-              </optgroup>
-              <optgroup label="── Equitel">
-                <option value="equitel_send">Equitel Send</option>
-                <option value="eazzy_pay">Eazzy Pay</option>
-                <option value="equitel_withdraw">Equitel Withdraw</option>
-              </optgroup>
-            </select>
-          </div>
-          <div class="field-row">
-            <div class="field"><label>Step (hour)</label><input id="f-step" type="number" value="1" min="1"></div>
-            <div class="field"><label>Amount (KES)</label><input id="f-amount" type="number" value="4878"></div>
-          </div>
-          <div class="field-row">
-            <div class="field"><label>Sender — before</label><input id="f-oldOrig" type="number" value="170136"></div>
-            <div class="field"><label>Sender — after</label><input id="f-newOrig" type="number" value="165258"></div>
-          </div>
-          <div class="field-row">
-            <div class="field"><label>Receiver — before</label><input id="f-oldDest" type="number" value="0"></div>
-            <div class="field"><label>Receiver — after</label><input id="f-newDest" type="number" value="4878"></div>
-          </div>
-          <div class="field">
-            <label>System fraud flag</label>
-            <select id="f-flag"><option value="0">No (0)</option><option value="1">Yes (1)</option></select>
-          </div>
-          <button class="btn-primary" onclick="manualPredict()">Analyze Transaction →</button>
-          <button class="btn-ghost" onclick="loadFraudExample()">Load fraud scenario (Send Money)</button>
-          <div class="error-bar" id="manual-error">Could not reach API at http://127.0.0.1:5000 — is the server running?</div>
-          <div class="result-box" id="manual-result">
-            <div class="result-verdict" id="res-verdict"></div>
-            <div class="result-detail" id="res-detail"></div>
-            <div class="result-tx" id="res-tx"></div>
-            <div class="prob-track"><div class="prob-fill" id="res-bar" style="width:0%"></div></div>
-          </div>
-        </div>
+      // Provider label for display
+      function providerOf(type) {
+        if (type.startsWith("airtel")) return "Airtel";
+        if (type.startsWith("tkash")) return "T-Kash";
+        if (type.startsWith("equitel") || type === "eazzy_pay")
+          return "Equitel";
+        return "M-Pesa";
+      }
 
-        <!-- Simulate -->
-        <div class="tab-panel" id="tp-sim">
-          <div class="api-note">Sending to <span>http://127.0.0.1:5000/predict</span></div>
-          <div class="sim-row">
-            <button class="btn-sim" id="sim-btn" onclick="toggleSim()">Start</button>
-            <button class="btn-reset" onclick="resetStats()">Reset</button>
-            <select class="speed-select" id="sim-speed">
-              <option value="2000">Slow</option>
-              <option value="1000" selected>Normal</option>
-              <option value="500">Fast</option>
-            </select>
-          </div>
-          <div class="error-bar" id="sim-error">Could not reach API — is the server running on port 5000?</div>
-          <div style="font-size:12px;color:var(--muted);font-family:var(--mono);line-height:1.8">
-            Simulates random Kenyan mobile money transactions (~15% fraud-like) across M-Pesa, Airtel Money, T-Kash and Equitel.
-          </div>
-        </div>
+      let stats = { total: 0, fraud: 0, probs: [], peak: 0 };
+      let simTimer = null;
+      let chart = null;
+      let feedRows = [];
 
-        <!-- Feed -->
-        <div class="tab-panel" id="tp-feed">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-            <span style="font-size:11px;color:var(--muted);font-family:var(--mono)" id="feed-count">0 transactions</span>
-            <button class="btn-reset" onclick="clearFeed()" style="padding:5px 12px;font-size:10px">Clear</button>
-          </div>
-          <div class="feed-list" id="tx-feed"><div class="empty-state">No transactions yet</div></div>
-        </div>
-      </div>
-    </div>
+      function switchTab(t) {
+        ["manual", "sim", "feed"].forEach((name, i) => {
+          document
+            .querySelectorAll(".tab")
+            [i].classList.toggle("active", name === t);
+          document
+            .getElementById("tp-" + name)
+            .classList.toggle("active", name === t);
+        });
+      }
 
-    <div class="right-col">
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">Fraud Probability — Live</span>
-          <span style="font-size:11px;color:var(--muted);font-family:var(--mono)" id="chart-count">0 samples</span>
-        </div>
-        <div class="panel-body" style="padding:16px 16px 8px">
-          <div class="chart-container"><canvas id="prob-chart"></canvas></div>
-          <div class="ticker">
-            <div>last: <span id="tick-last">—</span></div>
-            <div>peak: <span id="tick-peak">—</span></div>
-            <div>type: <span id="tick-type">—</span></div>
-            <div>amount: <span id="tick-amount">—</span></div>
-          </div>
-        </div>
-      </div>
+      function updateMetrics() {
+        document.getElementById("m-total").textContent = stats.total;
+        document.getElementById("m-fraud").textContent = stats.fraud;
+        const rate = stats.total ? (stats.fraud / stats.total) * 100 : 0;
+        document.getElementById("m-rate").textContent = rate.toFixed(2) + "%";
+        document.getElementById("m-rate").className =
+          "metric-val" + (rate > 5 ? " danger" : "");
+        const avg = stats.probs.length
+          ? stats.probs.reduce((a, b) => a + b, 0) / stats.probs.length
+          : null;
+        document.getElementById("m-conf").textContent =
+          avg !== null ? (avg * 100).toFixed(1) + "%" : "—";
+        document.getElementById("m-total-sub").textContent =
+          stats.total > 0 ? "all time" : "—";
+        document.getElementById("m-fraud-sub").textContent =
+          stats.fraud > 0
+            ? ((stats.fraud / stats.total) * 100).toFixed(1) + "% of total"
+            : "—";
+        document.getElementById("fraud-count-label").textContent =
+          stats.fraud + " fraud";
+      }
 
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">Recent Transactions</span>
-          <span style="font-size:11px;color:var(--muted);font-family:var(--mono)" id="fraud-count-label">0 fraud</span>
-        </div>
-        <div class="panel-body" style="padding:12px">
-          <div class="feed-list" id="recent-feed"><div class="empty-state">Waiting for transactions…</div></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+      function recordResult(res, payload) {
+        stats.total++;
+        stats.probs.push(res.fraud_probability);
+        if (res.prediction === 1) stats.fraud++;
+        if (res.fraud_probability > stats.peak)
+          stats.peak = res.fraud_probability;
+        updateMetrics();
+        addFeedRow(res, payload);
+        updateTicker(res, payload);
+        if (chart) pushChart(res.fraud_probability);
+        document.getElementById("chart-count").textContent =
+          stats.total + " samples";
+      }
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
-<script>
-const API     = 'http://127.0.0.1:5000/predict';
-const API_KEY = 'acbfd54923b78bc76f23d57de58814ce7d2bcb33d6fda09d643958e4904682c7';
+      function updateTicker(res, payload) {
+        document.getElementById("tick-last").textContent =
+          (res.fraud_probability * 100).toFixed(1) + "%";
+        document.getElementById("tick-peak").textContent =
+          (stats.peak * 100).toFixed(1) + "%";
+        document.getElementById("tick-type").textContent =
+          res.transaction_type || payload.type;
+        document.getElementById("tick-amount").textContent =
+          "KES " + Number(payload.amount).toLocaleString();
+      }
 
-// Kenyan mobile money transaction types for simulation
-const SIM_TYPES = {
-  fraud:  ['send_money', 'airtel_send', 'tkash_send', 'equitel_send'],
-  normal: [
-    'lipa_na_mpesa_till', 'lipa_na_mpesa_paybill', 'pochi_la_biashara',
-    'withdraw_agent', 'deposit_agent', 'airtel_pay', 'tkash_pay',
-    'eazzy_pay', 'fuliza', 'airtel_deposit'
-  ]
-};
+      function addFeedRow(res, payload) {
+        feedRows.unshift({ res, payload, ts: new Date().toLocaleTimeString() });
+        if (feedRows.length > 200) feedRows.pop();
+        renderFeeds();
+      }
 
-// Provider label for display
-function providerOf(type) {
-  if (type.startsWith('airtel'))  return 'Airtel';
-  if (type.startsWith('tkash'))   return 'T-Kash';
-  if (type.startsWith('equitel') || type === 'eazzy_pay') return 'Equitel';
-  return 'M-Pesa';
-}
-
-let stats = { total:0, fraud:0, probs:[], peak:0 };
-let simTimer = null;
-let chart = null;
-let feedRows = [];
-
-function switchTab(t) {
-  ['manual','sim','feed'].forEach((name, i) => {
-    document.querySelectorAll('.tab')[i].classList.toggle('active', name===t);
-    document.getElementById('tp-'+name).classList.toggle('active', name===t);
-  });
-}
-
-function updateMetrics() {
-  document.getElementById('m-total').textContent = stats.total;
-  document.getElementById('m-fraud').textContent = stats.fraud;
-  const rate = stats.total ? (stats.fraud/stats.total*100) : 0;
-  document.getElementById('m-rate').textContent = rate.toFixed(2)+'%';
-  document.getElementById('m-rate').className = 'metric-val'+(rate>5?' danger':'');
-  const avg = stats.probs.length ? stats.probs.reduce((a,b)=>a+b,0)/stats.probs.length : null;
-  document.getElementById('m-conf').textContent = avg !== null ? (avg*100).toFixed(1)+'%' : '—';
-  document.getElementById('m-total-sub').textContent = stats.total > 0 ? 'all time' : '—';
-  document.getElementById('m-fraud-sub').textContent = stats.fraud > 0 ? (stats.fraud/stats.total*100).toFixed(1)+'% of total' : '—';
-  document.getElementById('fraud-count-label').textContent = stats.fraud+' fraud';
-}
-
-function recordResult(res, payload) {
-  stats.total++;
-  stats.probs.push(res.fraud_probability);
-  if (res.prediction===1) stats.fraud++;
-  if (res.fraud_probability > stats.peak) stats.peak = res.fraud_probability;
-  updateMetrics();
-  addFeedRow(res, payload);
-  updateTicker(res, payload);
-  if (chart) pushChart(res.fraud_probability);
-  document.getElementById('chart-count').textContent = stats.total+' samples';
-}
-
-function updateTicker(res, payload) {
-  document.getElementById('tick-last').textContent   = (res.fraud_probability*100).toFixed(1)+'%';
-  document.getElementById('tick-peak').textContent   = (stats.peak*100).toFixed(1)+'%';
-  document.getElementById('tick-type').textContent   = res.transaction_type || payload.type;
-  document.getElementById('tick-amount').textContent = 'KES '+Number(payload.amount).toLocaleString();
-}
-
-function addFeedRow(res, payload) {
-  feedRows.unshift({ res, payload, ts: new Date().toLocaleTimeString() });
-  if (feedRows.length > 200) feedRows.pop();
-  renderFeeds();
-}
-
-function renderFeeds() {
-  const recent = document.getElementById('recent-feed');
-  const full   = document.getElementById('tx-feed');
-  document.getElementById('feed-count').textContent = feedRows.length+' transactions';
-  const html = feedRows.slice(0, 50).map(r => {
-    const isFraud = r.res.prediction===1;
-    const pct     = (r.res.fraud_probability*100).toFixed(1);
-    const provider = providerOf(r.payload.type);
-    return `<div class="feed-item ${isFraud?'fraud':''}">
-      <span class="feed-badge ${isFraud?'fraud':'ok'}">${isFraud?'FRAUD':'OK'}</span>
+      function renderFeeds() {
+        const recent = document.getElementById("recent-feed");
+        const full = document.getElementById("tx-feed");
+        document.getElementById("feed-count").textContent =
+          feedRows.length + " transactions";
+        const html = feedRows
+          .slice(0, 50)
+          .map((r) => {
+            const isFraud = r.res.prediction === 1;
+            const pct = (r.res.fraud_probability * 100).toFixed(1);
+            const provider = providerOf(r.payload.type);
+            return `<div class="feed-item ${isFraud ? "fraud" : ""}">
+      <span class="feed-badge ${isFraud ? "fraud" : "ok"}">${isFraud ? "FRAUD" : "OK"}</span>
       <span class="feed-amount">KES ${Number(r.payload.amount).toLocaleString()}</span>
       <span class="feed-type">${r.payload.type} · ${provider} · ${r.ts}</span>
-      <span class="feed-prob ${r.res.fraud_probability>0.3?'high':''}">${pct}%</span>
+      <span class="feed-prob ${r.res.fraud_probability > 0.3 ? "high" : ""}">${pct}%</span>
     </div>`;
-  }).join('');
-  const empty = '<div class="empty-state">Waiting for transactions…</div>';
-  recent.innerHTML = html || empty;
-  full.innerHTML   = html || '<div class="empty-state">No transactions yet</div>';
-}
-
-function clearFeed() { feedRows=[]; renderFeeds(); }
-
-function resetStats() {
-  stats = { total:0, fraud:0, probs:[], peak:0 };
-  updateMetrics();
-  if (chart) { chart.data.labels=[]; chart.data.datasets[0].data=[]; chart.update(); }
-  document.getElementById('chart-count').textContent = '0 samples';
-  ['tick-last','tick-peak','tick-type','tick-amount'].forEach(id => document.getElementById(id).textContent='—');
-}
-
-function pushChart(prob) {
-  const pct = parseFloat((prob*100).toFixed(2));
-  chart.data.labels.push('');
-  chart.data.datasets[0].data.push(pct);
-  if (chart.data.labels.length > 60) { chart.data.labels.shift(); chart.data.datasets[0].data.shift(); }
-  chart.update('none');
-}
-
-function initChart() {
-  const ctx = document.getElementById('prob-chart').getContext('2d');
-  chart = new Chart(ctx, {
-    type: 'line',
-    data: { labels:[], datasets:[{ data:[], borderColor:'#00ff88', backgroundColor:'rgba(0,255,136,0.06)', borderWidth:1.5, pointRadius:0, pointHoverRadius:4, pointHoverBackgroundColor:'#00ff88', tension:0.4, fill:true }] },
-    options: {
-      responsive:true, maintainAspectRatio:false, animation:{ duration:200 },
-      plugins: {
-        legend:{ display:false },
-        tooltip:{ callbacks:{ label: v=>`${v.parsed.y.toFixed(1)}%` }, backgroundColor:'#181c23', borderColor:'rgba(255,255,255,0.07)', borderWidth:1, titleColor:'#6b7280', bodyColor:'#00ff88', padding:10, cornerRadius:6 }
-      },
-      scales: {
-        x:{ display:false },
-        y:{ min:0, max:100, grid:{ color:'rgba(255,255,255,0.04)', drawBorder:false }, ticks:{ callback:v=>v+'%', color:'#6b7280', font:{ family:"'Space Mono'", size:10 }, maxTicksLimit:5 }, border:{ display:false } }
+          })
+          .join("");
+        const empty =
+          '<div class="empty-state">Waiting for transactions…</div>';
+        recent.innerHTML = html || empty;
+        full.innerHTML =
+          html || '<div class="empty-state">No transactions yet</div>';
       }
-    }
-  });
-}
 
-async function callAPI(payload) {
-  const res = await fetch(API, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json', 'X-API-Key': API_KEY },
-    body: JSON.stringify(payload)
-  });
-  return res.json();
-}
+      function clearFeed() {
+        feedRows = [];
+        renderFeeds();
+      }
 
-async function manualPredict() {
-  const errEl  = document.getElementById('manual-error');
-  const resBox = document.getElementById('manual-result');
-  errEl.style.display = 'none';
-  resBox.className = 'result-box visible';
-  document.getElementById('res-verdict').textContent = 'Analyzing…';
-  document.getElementById('res-verdict').className   = 'result-verdict';
-  document.getElementById('res-detail').textContent  = '';
-  document.getElementById('res-tx').textContent      = '';
-  document.getElementById('res-bar').style.width     = '0%';
+      function resetStats() {
+        stats = { total: 0, fraud: 0, probs: [], peak: 0 };
+        updateMetrics();
+        if (chart) {
+          chart.data.labels = [];
+          chart.data.datasets[0].data = [];
+          chart.update();
+        }
+        document.getElementById("chart-count").textContent = "0 samples";
+        ["tick-last", "tick-peak", "tick-type", "tick-amount"].forEach(
+          (id) => (document.getElementById(id).textContent = "—"),
+        );
+      }
 
-  const txType = document.getElementById('f-type').value;
-  const payload = {
-    step:          parseFloat(document.getElementById('f-step').value)||1,
-    type:          txType,
-    amount:        parseFloat(document.getElementById('f-amount').value)||0,
-    oldbalanceOrg: parseFloat(document.getElementById('f-oldOrig').value)||0,
-    newbalanceOrig:parseFloat(document.getElementById('f-newOrig').value)||0,
-    oldbalanceDest:parseFloat(document.getElementById('f-oldDest').value)||0,
-    newbalanceDest:parseFloat(document.getElementById('f-newDest').value)||0,
-    isFlaggedFraud:parseFloat(document.getElementById('f-flag').value)
-  };
+      function pushChart(prob) {
+        const pct = parseFloat((prob * 100).toFixed(2));
+        chart.data.labels.push("");
+        chart.data.datasets[0].data.push(pct);
+        if (chart.data.labels.length > 60) {
+          chart.data.labels.shift();
+          chart.data.datasets[0].data.shift();
+        }
+        chart.update("none");
+      }
 
-  try {
-    const res = await callAPI(payload);
-    if (res.error) { errEl.style.display='block'; errEl.textContent='API error: '+res.error; resBox.className='result-box'; return; }
-    recordResult(res, payload);
+      function initChart() {
+        const ctx = document.getElementById("prob-chart").getContext("2d");
+        chart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                data: [],
+                borderColor: "#00ff88",
+                backgroundColor: "rgba(0,255,136,0.06)",
+                borderWidth: 1.5,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                pointHoverBackgroundColor: "#00ff88",
+                tension: 0.4,
+                fill: true,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 200 },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: { label: (v) => `${v.parsed.y.toFixed(1)}%` },
+                backgroundColor: "#181c23",
+                borderColor: "rgba(255,255,255,0.07)",
+                borderWidth: 1,
+                titleColor: "#6b7280",
+                bodyColor: "#00ff88",
+                padding: 10,
+                cornerRadius: 6,
+              },
+            },
+            scales: {
+              x: { display: false },
+              y: {
+                min: 0,
+                max: 100,
+                grid: { color: "rgba(255,255,255,0.04)", drawBorder: false },
+                ticks: {
+                  callback: (v) => v + "%",
+                  color: "#6b7280",
+                  font: { family: "'Space Mono'", size: 10 },
+                  maxTicksLimit: 5,
+                },
+                border: { display: false },
+              },
+            },
+          },
+        });
+      }
 
-    const isFraud  = res.prediction===1;
-    const pct      = (res.fraud_probability*100).toFixed(1);
-    const threshold = res.threshold_used ? (res.threshold_used*100).toFixed(1) : '68.4';
-    const provider  = providerOf(txType);
+      async function callAPI(payload) {
+        const res = await fetch(API, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
+          body: JSON.stringify(payload),
+        });
+        return res.json();
+      }
 
-    resBox.className = `result-box ${isFraud?'fraud':'legit'} visible`;
-    document.getElementById('res-verdict').textContent = isFraud ? '⚠ FRAUD DETECTED' : '✓ LEGITIMATE';
-    document.getElementById('res-verdict').className   = `result-verdict ${isFraud?'fraud':'legit'}`;
-    document.getElementById('res-detail').textContent  = `probability ${pct}% · threshold ${threshold}%`;
-    document.getElementById('res-tx').textContent      = `${provider} · ${txType} · type code ${res.type_code}`;
-    const bar = document.getElementById('res-bar');
-    bar.style.width = Math.max(2, res.fraud_probability*100)+'%';
-    bar.className   = `prob-fill ${isFraud?'high':''}`;
-    setStatus('active');
-  } catch(e) {
-    errEl.style.display='block';
-    errEl.textContent='Could not reach API at http://127.0.0.1:5000 — is the server running?';
-    resBox.className='result-box';
-  }
-}
+      async function manualPredict() {
+        const errEl = document.getElementById("manual-error");
+        const resBox = document.getElementById("manual-result");
+        errEl.style.display = "none";
+        resBox.className = "result-box visible";
+        document.getElementById("res-verdict").textContent = "Analyzing…";
+        document.getElementById("res-verdict").className = "result-verdict";
+        document.getElementById("res-detail").textContent = "";
+        document.getElementById("res-tx").textContent = "";
+        document.getElementById("res-bar").style.width = "0%";
 
-function loadFraudExample() {
-  document.getElementById('f-type').value   = 'send_money';
-  document.getElementById('f-step').value   = '1';
-  document.getElementById('f-amount').value = '450000';
-  document.getElementById('f-oldOrig').value= '450000';
-  document.getElementById('f-newOrig').value= '0';
-  document.getElementById('f-oldDest').value= '0';
-  document.getElementById('f-newDest').value= '0';
-  document.getElementById('f-flag').value   = '0';
-}
+        const txType = document.getElementById("f-type").value;
+        const payload = {
+          step: parseFloat(document.getElementById("f-step").value) || 1,
+          type: txType,
+          amount: parseFloat(document.getElementById("f-amount").value) || 0,
+          oldbalanceOrg:
+            parseFloat(document.getElementById("f-oldOrig").value) || 0,
+          newbalanceOrig:
+            parseFloat(document.getElementById("f-newOrig").value) || 0,
+          oldbalanceDest:
+            parseFloat(document.getElementById("f-oldDest").value) || 0,
+          newbalanceDest:
+            parseFloat(document.getElementById("f-newDest").value) || 0,
+          isFlaggedFraud: parseFloat(document.getElementById("f-flag").value),
+        };
 
-function randomTx() {
-  const isFraudSim = Math.random() < 0.15;
-  if (isFraudSim) {
-    const type = SIM_TYPES.fraud[Math.floor(Math.random()*SIM_TYPES.fraud.length)];
-    const amt  = Math.round(10000 + Math.random()*490000);
-    return { step:Math.ceil(Math.random()*720), type, amount:amt, oldbalanceOrg:amt, newbalanceOrig:0, oldbalanceDest:0, newbalanceDest:0, isFlaggedFraud:0 };
-  }
-  const type = SIM_TYPES.normal[Math.floor(Math.random()*SIM_TYPES.normal.length)];
-  const amt  = Math.round(50 + Math.random()*49950);
-  const bal  = Math.round(amt + Math.random()*200000);
-  return { step:Math.ceil(Math.random()*720), type, amount:amt, oldbalanceOrg:bal, newbalanceOrig:bal-amt, oldbalanceDest:Math.round(Math.random()*50000), newbalanceDest:Math.round(Math.random()*50000), isFlaggedFraud:0 };
-}
+        try {
+          const res = await callAPI(payload);
+          if (res.error) {
+            errEl.style.display = "block";
+            errEl.textContent = "API error: " + res.error;
+            resBox.className = "result-box";
+            return;
+          }
+          recordResult(res, payload);
 
-async function runSimStep() {
-  const errEl = document.getElementById('sim-error');
-  try {
-    const payload = randomTx();
-    const res     = await callAPI(payload);
-    if (!res.error) { errEl.style.display='none'; recordResult(res, payload); }
-  } catch(e) { errEl.style.display='block'; }
-}
+          const isFraud = res.prediction === 1;
+          const pct = (res.fraud_probability * 100).toFixed(1);
+          const threshold = res.threshold_used
+            ? (res.threshold_used * 100).toFixed(1)
+            : "68.4";
+          const provider = providerOf(txType);
 
-function setStatus(state) {
-  const dot   = document.getElementById('status-dot');
-  const label = document.getElementById('status-label');
-  if (state==='live')   { dot.className='dot live'; label.textContent='Simulation live'; }
-  else if (state==='active') { dot.className='dot live'; label.textContent='Active'; }
-  else { dot.className='dot'; label.textContent='Idle'; }
-}
+          resBox.className = `result-box ${isFraud ? "fraud" : "legit"} visible`;
+          document.getElementById("res-verdict").textContent = isFraud
+            ? "⚠ FRAUD DETECTED"
+            : "✓ LEGITIMATE";
+          document.getElementById("res-verdict").className =
+            `result-verdict ${isFraud ? "fraud" : "legit"}`;
+          document.getElementById("res-detail").textContent =
+            `probability ${pct}% · threshold ${threshold}%`;
+          document.getElementById("res-tx").textContent =
+            `${provider} · ${txType} · type code ${res.type_code}`;
+          const bar = document.getElementById("res-bar");
+          bar.style.width = Math.max(2, res.fraud_probability * 100) + "%";
+          bar.className = `prob-fill ${isFraud ? "high" : ""}`;
+          setStatus("active");
+        } catch (e) {
+          errEl.style.display = "block";
+          errEl.textContent =
+            "Could not reach API at http://127.0.0.1:5000 — is the server running?";
+          resBox.className = "result-box";
+        }
+      }
 
-function toggleSim() {
-  const btn = document.getElementById('sim-btn');
-  if (simTimer) {
-    clearInterval(simTimer); simTimer=null;
-    btn.textContent='Start'; btn.className='btn-sim';
-    setStatus('idle');
-  } else {
-    if (!chart) initChart();
-    const speed = parseInt(document.getElementById('sim-speed').value);
-    runSimStep();
-    simTimer = setInterval(runSimStep, speed);
-    btn.textContent='Stop'; btn.className='btn-sim stop';
-    setStatus('live');
-  }
-}
+      function loadFraudExample() {
+        document.getElementById("f-type").value = "send_money";
+        document.getElementById("f-step").value = "1";
+        document.getElementById("f-amount").value = "450000";
+        document.getElementById("f-oldOrig").value = "450000";
+        document.getElementById("f-newOrig").value = "0";
+        document.getElementById("f-oldDest").value = "0";
+        document.getElementById("f-newDest").value = "0";
+        document.getElementById("f-flag").value = "0";
+      }
 
-initChart();
-</script>
-</body>
+      function randomTx() {
+        const isFraudSim = Math.random() < 0.15;
+        if (isFraudSim) {
+          const type =
+            SIM_TYPES.fraud[Math.floor(Math.random() * SIM_TYPES.fraud.length)];
+          const amt = Math.round(10000 + Math.random() * 490000);
+          return {
+            step: Math.ceil(Math.random() * 720),
+            type,
+            amount: amt,
+            oldbalanceOrg: amt,
+            newbalanceOrig: 0,
+            oldbalanceDest: 0,
+            newbalanceDest: 0,
+            isFlaggedFraud: 0,
+          };
+        }
+        const type =
+          SIM_TYPES.normal[Math.floor(Math.random() * SIM_TYPES.normal.length)];
+        const amt = Math.round(50 + Math.random() * 49950);
+        const bal = Math.round(amt + Math.random() * 200000);
+        return {
+          step: Math.ceil(Math.random() * 720),
+          type,
+          amount: amt,
+          oldbalanceOrg: bal,
+          newbalanceOrig: bal - amt,
+          oldbalanceDest: Math.round(Math.random() * 50000),
+          newbalanceDest: Math.round(Math.random() * 50000),
+          isFlaggedFraud: 0,
+        };
+      }
+
+      async function runSimStep() {
+        const errEl = document.getElementById("sim-error");
+        try {
+          const payload = randomTx();
+          const res = await callAPI(payload);
+          if (!res.error) {
+            errEl.style.display = "none";
+            recordResult(res, payload);
+          }
+        } catch (e) {
+          errEl.style.display = "block";
+        }
+      }
+
+      function setStatus(state) {
+        const dot = document.getElementById("status-dot");
+        const label = document.getElementById("status-label");
+        if (state === "live") {
+          dot.className = "dot live";
+          label.textContent = "Simulation live";
+        } else if (state === "active") {
+          dot.className = "dot live";
+          label.textContent = "Active";
+        } else {
+          dot.className = "dot";
+          label.textContent = "Idle";
+        }
+      }
+
+      function toggleSim() {
+        const btn = document.getElementById("sim-btn");
+        if (simTimer) {
+          clearInterval(simTimer);
+          simTimer = null;
+          btn.textContent = "Start";
+          btn.className = "btn-sim";
+          setStatus("idle");
+        } else {
+          if (!chart) initChart();
+          const speed = parseInt(document.getElementById("sim-speed").value);
+          runSimStep();
+          simTimer = setInterval(runSimStep, speed);
+          btn.textContent = "Stop";
+          btn.className = "btn-sim stop";
+          setStatus("live");
+        }
+      }
+
+      initChart();
+    </script>
+  </body>
 </html>
